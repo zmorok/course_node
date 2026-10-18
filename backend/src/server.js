@@ -5,6 +5,10 @@ import { createDatabasePool } from './config/database.js';
 import { createHealthRepository } from './repositories/health.repository.js';
 import { createHealthService } from './services/health.service.js';
 import { createApiRouter } from './routes/index.js';
+import { createAuthRepository } from './repositories/auth.repository.js';
+import { withTransaction } from './repositories/transaction.js';
+import { createAuthService } from './services/auth.service.js';
+import { createAccessTokens } from './utils/tokens.js';
 
 let pool;
 try {
@@ -13,7 +17,10 @@ try {
   pool = createDatabasePool(config.database);
   const healthRepository = createHealthRepository(pool);
   const healthService = createHealthService({ healthRepository, uploadDir: config.uploadDir });
-  const apiRouter = createApiRouter({ healthService });
+  const authService = await createAuthService({ repository: createAuthRepository(pool),
+    transaction: operation => withTransaction(pool, client => operation(createAuthRepository(client))),
+    accessTokens: createAccessTokens(config.auth), sessionTtlDays: config.auth.sessionTtlDays });
+  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));

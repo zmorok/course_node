@@ -25,6 +25,10 @@ export function loadConfig(source = process.env) {
     if (!Number.isSafeInteger(value) || value < min || value > max) invalid.push(key);
     return value;
   }
+  const secret = text('AUTH_JWT_SECRET', undefined, { secret: true });
+  if (!/^[a-f0-9]{64}$/i.test(secret) || /^(.)\1+$/.test(secret)) invalid.push('AUTH_JWT_SECRET');
+  const cookieSecure = text('AUTH_COOKIE_SECURE', 'false');
+  if (!['true', 'false'].includes(cookieSecure)) invalid.push('AUTH_COOKIE_SECURE');
   const nodeEnv = text('NODE_ENV', 'development');
   if (!['development', 'test', 'production'].includes(nodeEnv)) invalid.push('NODE_ENV');
   const uploadDir = text('UPLOAD_DIR', fileURLToPath(new URL('../../uploads/', import.meta.url)));
@@ -34,6 +38,9 @@ export function loadConfig(source = process.env) {
     port: integer('PORT', 3000, 1, 65535),
     uploadDir,
     jsonLimitBytes: integer('HTTP_JSON_LIMIT_BYTES', 65536, 1024, 1048576),
+    auth: Object.freeze({ secret, cookieSecure: cookieSecure === 'true',
+      accessTtlSeconds: integer('AUTH_ACCESS_TTL_SECONDS', 900, 60, 3600),
+      sessionTtlDays: integer('AUTH_SESSION_TTL_DAYS', 30, 1, 90) }),
     database: Object.freeze({
       host: text('PGHOST', 'postgres'),
       port: integer('PGPORT', 5432, 1, 65535),
