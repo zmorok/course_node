@@ -28,4 +28,13 @@ SELECT NOT EXISTS (SELECT FROM workify.schema_migrations WHERE version = 1) AS a
     COMMIT;
 \endif
 
+SELECT NOT EXISTS (SELECT FROM workify.schema_migrations WHERE version = 2) AS apply_002 \gset
+\if :apply_002
+    BEGIN;
+    \ir migrations/002_indexes_and_views.sql
+    \ir seeds/reference_data.sql
+    INSERT INTO workify.schema_migrations (version, name) VALUES (2, 'indexes_views_reference_data');
+    COMMIT;
+\endif
+
 SELECT pg_advisory_unlock(173204, 2);
