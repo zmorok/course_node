@@ -45,6 +45,12 @@ services:
       PGUSER: ${POSTGRES_USER:-workify}
       PGPASSWORD: ${POSTGRES_PASSWORD:?Run node scripts/setup-env.mjs to create .env}
       UPLOAD_DIR: /app/uploads
+      HTTP_JSON_LIMIT_BYTES: "${HTTP_JSON_LIMIT_BYTES:-65536}"
+      PGPOOL_MAX: "${PGPOOL_MAX:-5}"
+      PG_CONNECTION_TIMEOUT_MS: "${PG_CONNECTION_TIMEOUT_MS:-2000}"
+      PG_IDLE_TIMEOUT_MS: "${PG_IDLE_TIMEOUT_MS:-10000}"
+      PG_QUERY_TIMEOUT_MS: "${PG_QUERY_TIMEOUT_MS:-2000}"
+      PG_STATEMENT_TIMEOUT_MS: "${PG_STATEMENT_TIMEOUT_MS:-2000}"
     ports:
       - "127.0.0.1:${BACKEND_PORT:-3000}:3000"
     volumes:
