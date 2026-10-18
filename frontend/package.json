@@ -1,0 +1,19 @@
+{
+  "name": "workify-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "express": "5.3.0",
+    "http-proxy-middleware": "4.2.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": { "vite": "8.3.4" }
+}
