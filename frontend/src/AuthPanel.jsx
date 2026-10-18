@@ -28,13 +28,13 @@ export function AuthPanel({ onAuthenticate, restoring, notice }) {
   }
   const names = isRegister ? ['firstName', 'lastName', 'username', 'email', 'password', 'confirmPassword'] : ['email', 'password'];
   return (
-    <section className="auth-card" aria-labelledby="auth-title">
+    <section className={`auth-card${isRegister ? ' auth-card-register' : ''}`} aria-labelledby="auth-title">
       <div className="auth-tabs" aria-label="Доступ к аккаунту">
         {[['login', 'Вход'], ['register', 'Регистрация']].map(([value, label]) => <button key={value} type="button"
           className={mode === value ? 'tab active' : 'tab'} aria-pressed={mode === value} disabled={busy || restoring}
           onClick={() => { setMode(value); setProblem(null); setVisible(false); }}>{label}</button>)}
       </div>
-      <p className="eyebrow">{isRegister ? 'Начните вместе с Workify' : 'С возвращением'}</p>
+      {!isRegister && <p className="eyebrow">С возвращением</p>}
       <h2 id="auth-title">{isRegister ? 'Создать аккаунт' : 'Войти в рабочее пространство'}</h2>
       <p className="auth-description">{isRegister ? 'Один аккаунт — для своих проектов и работы исполнителем.' : 'Продолжите работу над тем, что важно.'}</p>
       {restoring ? <p role="status">Восстанавливаем сессию…</p> : <>
@@ -64,7 +64,7 @@ export function AuthPanel({ onAuthenticate, restoring, notice }) {
           </fieldset>
         </form>
       </>}
-      <p className="auth-footnote">{isRegister ? 'Заказчик и исполнитель — два режима вашего аккаунта.' : 'Сессия восстановится при следующем посещении.'}</p>
+      {!isRegister && <p className="auth-footnote">Сессия восстановится при следующем посещении.</p>}
     </section>
   );
 }
