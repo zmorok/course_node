@@ -1,8 +1,30 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
+import { AuthPanel, AccountPanel } from './AuthPanel.jsx';
+import { authenticate, restoreSession, logout, api } from './api.js';
 
 function App() {
+  const [user, setUser] = useState(null);
+  const [restoring, setRestoring] = useState(true);
+  const [notice, setNotice] = useState('');
+  const [restoreFailed, setRestoreFailed] = useState(false);
+  async function restore() {
+    setRestoring(true); setRestoreFailed(false); setNotice('');
+    try { setUser(await restoreSession()); }
+    catch (error) {
+      if (error.status !== 401) { setNotice(error.message); setRestoreFailed(error.status !== 403); }
+    } finally { setRestoring(false); }
+  }
+  useEffect(() => {
+    let active = true;
+    restoreSession().then(value => { if (active) setUser(value); }).catch(error => {
+      if (active && error.status !== 401) { setNotice(error.message); setRestoreFailed(error.status !== 403); }
+    }).finally(() => { if (active) setRestoring(false); });
+    const ended = event => { setUser(null); setNotice(event.detail ?? 'Вы вышли из аккаунта'); };
+    window.addEventListener('workify:session-ended', ended);
+    return () => { active = false; window.removeEventListener('workify:session-ended', ended); };
+  }, []);
   const [connection, setConnection] = useState('checking');
   const checkConnection = useCallback(async signal => {
     setConnection('checking');
@@ -41,14 +63,12 @@ function App() {
           </div>
           <button type="button" onClick={() => checkConnection()} disabled={connection === 'checking'}>Проверить подключение <span aria-hidden="true">↗</span></button>
         </section>
-        <aside className="workspace" aria-label="Возможности рабочего пространства">
-          <div className="workspace-top"><span>Всё в одном пространстве</span><span aria-hidden="true">↗</span></div>
-          <ol>
-            <li><span className="step">01</span><div><h2>Сформулировать задачу</h2><p>Описание проекта и ожидаемый результат.</p></div></li>
-            <li><span className="step">02</span><div><h2>Найти друг друга</h2><p>Отклики и приглашения к сотрудничеству.</p></div></li>
-            <li><span className="step">03</span><div><h2>Довести до результата</h2><p>Работа, обратная связь и приёмка.</p></div></li>
-          </ol>
-          <p className="workspace-note">Рабочее пространство готовится.<br />Разделы проектов и заказов появятся здесь позже.</p>
+        <aside className="auth-area" aria-label="Аккаунт Workify">
+          {user ? <AccountPanel user={user} onLogout={logout}
+            onRefresh={async () => { const result = await api('/auth/me'); setUser(result.user); return 'Данные аккаунта обновлены'; }}
+            onAdminCheck={async () => { await api('/admin/access'); return 'Доступ администратора подтверждён'; }} />
+            : <AuthPanel restoring={restoring} notice={notice} onAuthenticate={async (mode, values) => { setUser(await authenticate(mode, values)); setNotice(''); setRestoreFailed(false); }} />}
+          {restoreFailed && !restoring && !user && <button className="restore-button secondary" onClick={restore}>Повторить восстановление сессии</button>}
         </aside>
       </main>
       <footer><span>Workify</span><span>Для работы, у которой есть результат.</span></footer>

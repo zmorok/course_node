@@ -45,6 +45,10 @@ services:
       PGUSER: ${POSTGRES_USER:-workify}
       PGPASSWORD: ${POSTGRES_PASSWORD:?Run node scripts/setup-env.mjs to create .env}
       UPLOAD_DIR: /app/uploads
+      AUTH_JWT_SECRET: ${AUTH_JWT_SECRET:?Run node scripts/setup-env.mjs to add the JWT secret}
+      AUTH_COOKIE_SECURE: "${AUTH_COOKIE_SECURE:-false}"
+      AUTH_ACCESS_TTL_SECONDS: "${AUTH_ACCESS_TTL_SECONDS:-900}"
+      AUTH_SESSION_TTL_DAYS: "${AUTH_SESSION_TTL_DAYS:-30}"
       HTTP_JSON_LIMIT_BYTES: "${HTTP_JSON_LIMIT_BYTES:-65536}"
       PGPOOL_MAX: "${PGPOOL_MAX:-5}"
       PG_CONNECTION_TIMEOUT_MS: "${PG_CONNECTION_TIMEOUT_MS:-2000}"

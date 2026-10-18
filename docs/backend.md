@@ -1,6 +1,6 @@
 # Каркас backend Workify
 
-Backend использует JavaScript, Express 5 и `pg`. Создание приложения не открывает порт и не создаёт глобальных соединений. Прикладной маршрут этапа 04 — `GET /api/health`; авторизация и остальные сценарии добавляются последовательно начиная с этапа 05.
+Backend использует JavaScript, Express 5 и `pg`. Создание приложения не открывает порт и не создаёт глобальных соединений. Каркас этапа 04 расширен [авторизацией и ролями](auth.md) на этапе 05; health API сохраняет прежний контракт.
 
 ## Структура и границы слоёв
 
@@ -31,7 +31,7 @@ backend/test/
 | repositories/DAO | Параметризованные запросы и преобразование результата | Получает pool или транзакционный client; не решает права пользователя |
 | middleware/validators | Общие HTTP-правила и проверка формы данных | Валидация не подменяет авторизацию или бизнес-проверки |
 
-[server.js](../backend/src/server.js) создаёт config → pool → healthRepository → healthService → apiRouter → app, затем начинает слушать порт. [createApp](../backend/src/app.js) собирает HTTP-приложение из переданного router. Фабрики позволяют тестировать запросы с подставными зависимостями; тестовые маршруты не подключены в рабочем server.js.
+[server.js](../backend/src/server.js) создаёт config → pool → repositories → health/auth services → apiRouter → app, затем начинает слушать порт. [createApp](../backend/src/app.js) собирает HTTP-приложение из переданного router. Фабрики позволяют тестировать запросы с подставными зависимостями; тестовые маршруты не подключены в рабочем server.js.
 
 При SIGTERM/SIGINT HTTP server прекращает принимать новые запросы, затем закрывается pg pool. Повторный сигнал не запускает параллельное закрытие; предельное ожидание — 10 секунд. Ошибка конфигурации или запуска завершает процесс с ненулевым кодом, без печати credentials.
 
@@ -50,7 +50,7 @@ Docker передаёт PGHOST=postgres, PGPORT=5432, PGDATABASE/PGUSER/PGPASSWO
 | PG_QUERY_TIMEOUT_MS | 2000 | 100–60000 мс |
 | PG_STATEMENT_TIMEOUT_MS | 2000 | 100–60000 мс |
 
-Настройки передаются из .env через Compose; безопасные значения приведены в [.env.example](../.env.example). Существующий локальный .env не перезаписывается: новые отсутствующие параметры получают defaults Compose. FRONTEND_PORT/BACKEND_PORT меняют host binding, не внутренние адреса сервисов.
+Настройки передаются из .env через Compose; безопасные значения приведены в [.env.example](../.env.example). Необязательные отсутствующие параметры получают defaults Compose; AUTH_JWT_SECRET генерируется setup-env и обязателен. FRONTEND_PORT/BACKEND_PORT меняют host binding, не внутренние адреса сервисов. Параметры авторизации описаны [отдельно](auth.md#конфигурация-и-первый-admin).
 
 [createDatabasePool](../backend/src/config/database.js) создаёт один pool на процесс. Импорт config/app/repository не создаёт pool или соединение. Idle connection errors обрабатываются без печати строки подключения. SQL остаётся в repositories; значения пользователя передаются через `$1`, `$2` и массив параметров.
 
@@ -116,7 +116,7 @@ asyncHandler передаёт в middleware синхронное исключе�
 node scripts/test-infrastructure.mjs
 ```
 
-Runner монтирует backend/test read-only в отдельные тестовые контейнеры и запускает 34 unit-проверки и 4 проверки на реальном PostgreSQL 17, затем проверяет React/API, volumes и восстановление сервисов. Интеграционный набор требует WORKIFY_DB_TESTS=1, задаваемый этим запуском. Собственные тестовые category rows удаляются набором, тестовые volumes — в finally. Рабочая база не используется.
+Runner монтирует backend/test read-only в отдельные тестовые контейнеры и запускает 43 unit-проверки и 15 проверок на реальном PostgreSQL 17, затем проверяет React/API, volumes и восстановление сервисов. Интеграционный набор требует WORKIFY_DB_TESTS=1, задаваемый этим запуском. Собственные тестовые строки удаляются набором, тестовые volumes — в finally. Рабочая база не используется.
 
 Unit-набор отдельно после сборки backend:
 
@@ -125,6 +125,8 @@ docker compose run --rm --no-deps --volume ./backend/test:/app/test:ro backend n
 ```
 
 Unit-проверки не выполняют SQL: используются подставные repositories/HTTP-приложения. Проверяются конфигурация и отказ до listen, parser/404/5xx, request ID, скрытие деталей, whitelist и типы, readiness, commit/rollback и освобождение клиентов. Интеграционный набор проверяет pg pool, единую сессию, параметризацию, commit, rollback и восстановление после ошибки ограничения. В runtime image тестов нет.
+
+На этапе 05 добавлены auth routes/controller/service/repository, middleware авторизации и ролей, Argon2id/JWT и миграция сессий. Состав проверок и конфигурация auth приведены в [документации авторизации](auth.md).
 
 Изучены ООП `DAL/UnitOfWork.cs`, `FreelanceApp/Services/DbContextFactory.cs`, `DAL/Repository/UserRepositories/UserOrdersRepository.cs` и `_материалы/Workify_STSR_Project_Specification_v4/docs/07_backend_architecture.md`, `12_security.md`. Корни источников приведены в [предметной модели](domain-model.md). Сохранены repository и единая транзакционная сессия; EF, WPF, fallback-пользователь и выбор привилегированной DB-роли по данным клиента не переносятся. Роли CLIENT/ADMIN проверяются backend начиная с этапа 05.
 
