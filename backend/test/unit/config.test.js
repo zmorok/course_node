@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
-const valid = { NODE_ENV: 'test', PGPASSWORD: 'test-only-password' };
+const valid = { NODE_ENV: 'test', PGPASSWORD: 'test-only-password', AUTH_JWT_SECRET: '1234567890abcdef'.repeat(4) };
 
 test('configuration preserves Docker defaults, secret whitespace and immutable options', () => {
   const config = loadConfig({ ...valid, PGPASSWORD: '  significant spaces  ' });
@@ -27,6 +27,8 @@ test('invalid settings fail with field names and no configuration values', async
     ['PG_CONNECTION_TIMEOUT_MS', '0'], ['HTTP_JSON_LIMIT_BYTES', '1048577'],
     ['PGHOST', ''], ['PGUSER', ' '], ['PGDATABASE', ''], ['PGPASSWORD', ''],
     ['NODE_ENV', 'unknown'], ['UPLOAD_DIR', 'relative/uploads'],
+    ['AUTH_JWT_SECRET', 'short'], ['AUTH_JWT_SECRET', '0'.repeat(64)],
+    ['AUTH_COOKIE_SECURE', 'yes'], ['AUTH_ACCESS_TTL_SECONDS', '0'], ['AUTH_SESSION_TTL_DAYS', '91'],
   ];
   for (const [field, value] of cases) {
     await context.test(`${field}: ${JSON.stringify(value)}`, () => {

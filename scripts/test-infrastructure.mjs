@@ -13,6 +13,8 @@ const environment = {
   POSTGRES_DB: 'workify_smoke',
   POSTGRES_USER: 'workify_smoke',
   POSTGRES_PASSWORD: randomBytes(32).toString('hex'),
+  AUTH_JWT_SECRET: randomBytes(32).toString('hex'),
+  AUTH_COOKIE_SECURE: 'false',
   FRONTEND_PORT: '0',
   BACKEND_PORT: '0',
 };
@@ -42,8 +44,8 @@ async function serviceUrl(service, port) {
   return `http://${address}`;
 }
 
-async function request(url) {
-  return fetch(url, { signal: AbortSignal.timeout(15000) });
+async function request(url, options = {}) {
+  return fetch(url, { ...options, signal: AbortSignal.timeout(15000) });
 }
 
 async function expectHealth(base, expectedStatus, database) {
@@ -67,8 +69,8 @@ try {
   assert.equal(await backendNode('console.log(process.getuid())'), '1000');
   assert.equal(await backendNode('console.log(process.env.PGHOST)'), 'postgres');
   assert.equal(await sql("SELECT current_setting('server_version_num')::int / 10000"), '17');
-  assert.equal(await sql('SELECT count(*) FROM workify.schema_migrations'), '2');
-  assert.equal(await sql("SELECT count(*) FROM information_schema.tables WHERE table_schema='workify' AND table_type='BASE TABLE'"), '28');
+  assert.equal(await sql('SELECT count(*) FROM workify.schema_migrations'), '3');
+  assert.equal(await sql("SELECT count(*) FROM information_schema.tables WHERE table_schema='workify' AND table_type='BASE TABLE'"), '30');
   assert.equal(await sql('SELECT count(*) FROM workify.categories'), '8');
   assert.equal(await sql('SELECT count(*) FROM workify.skills'), '20');
   await expectHealth(backend, 200, 'up');
@@ -84,6 +86,23 @@ try {
       '-e', 'WORKIFY_DB_TESTS=1', 'backend', 'npm', 'run', script);
     console.log(result.stdout.trim());
   }
+
+  const authHeaders = { 'Content-Type': 'application/json', 'X-Workify-Client': 'browser' };
+  const authSuffix = randomUUID().replaceAll('-', '');
+  const registration = await request(`${frontend}/api/auth/register`, { method: 'POST', headers: authHeaders,
+    body: JSON.stringify({ email: `${authSuffix}@example.invalid`, username: `smoke_${authSuffix}`,
+      password: 'isolated-smoke-password', firstName: 'Smoke', lastName: 'Test' }) });
+  assert.equal(registration.status, 201);
+  const account = await registration.json();
+  const refreshCookie = registration.headers.get('set-cookie').split(';')[0];
+  assert.match(registration.headers.get('set-cookie'), /HttpOnly/);
+  const authorization = { Authorization: `Bearer ${account.accessToken}` };
+  assert.equal((await request(`${frontend}/api/auth/me`, { headers: authorization })).status, 200);
+  assert.equal((await request(`${frontend}/api/auth/me`)).status, 401);
+  assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 403);
+  await compose('exec', '-T', 'backend', 'node', 'src/commands/promote-admin.js', account.user.email);
+  assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 200);
+  console.log('PASS: registration, HttpOnly cookie, current user and CLIENT restriction through the frontend proxy');
 
   const page = await request(frontend);
   assert.equal(page.status, 200);
@@ -118,6 +137,17 @@ try {
   frontend = await serviceUrl('frontend', 8080);
   backend = await serviceUrl('backend', 3000);
   await expectHealth(frontend, 200, 'up');
+  const restored = await request(`${frontend}/api/auth/refresh`, { method: 'POST', headers: { ...authHeaders, Cookie: refreshCookie } });
+  assert.equal(restored.status, 200, 'The session and JWT signing key must survive backend recreation');
+  const renewed = await restored.json();
+  const renewedCookie = restored.headers.get('set-cookie').split(';')[0];
+  assert.equal(renewed.user.id, account.user.id);
+  assert.equal((await request(`${frontend}/api/auth/me`, { headers: authorization })).status, 200);
+  const out = await request(`${frontend}/api/auth/logout`, { method: 'POST', headers: { ...authHeaders, Cookie: renewedCookie } });
+  assert.equal(out.status, 204);
+  assert.equal((await request(`${frontend}/api/auth/me`, { headers: authorization })).status, 401);
+  assert.equal((await request(`${frontend}/api/auth/me`, { headers: { Authorization: `Bearer ${renewed.accessToken}` } })).status, 401);
+  console.log('PASS: session restoration after container replacement and immediate JWT revocation on logout');
   console.log('PASS: postgres_data and uploads_data survive real container replacement; migrations are not reapplied');
 
   await compose('stop', 'postgres');
@@ -139,7 +169,7 @@ try {
   console.log('PASS: proxy returns safe JSON on backend outage and recovers after restart');
   console.log('All infrastructure checks passed.');
 } catch (error) {
-  console.error(error.stderr || error.stack || String(error));
+  console.error([error.stdout, error.stderr].filter(Boolean).join('\n') || error.stack || String(error));
   process.exitCode = 1;
 } finally {
   if (created) {
