@@ -73,6 +73,17 @@ try {
   assert.equal(await sql('SELECT count(*) FROM workify.skills'), '20');
   await expectHealth(backend, 200, 'up');
   await expectHealth(frontend, 200, 'up');
+  const missing = await request(`${frontend}/api/missing`);
+  assert.equal(missing.status, 404);
+  const missingBody = await missing.json();
+  assert.equal(missingBody.error.code, 'NOT_FOUND');
+  assert.equal(missingBody.requestId, missing.headers.get('x-request-id'));
+
+  for (const script of ['test', 'test:integration']) {
+    const result = await compose('run', '--rm', '--no-deps', '--volume', './backend/test:/app/test:ro',
+      '-e', 'WORKIFY_DB_TESTS=1', 'backend', 'npm', 'run', script);
+    console.log(result.stdout.trim());
+  }
 
   const page = await request(frontend);
   assert.equal(page.status, 200);
