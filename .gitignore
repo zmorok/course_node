@@ -1,0 +1,29 @@
+# Dependencies and generated output
+node_modules/
+dist/
+build/
+coverage/
+.cache/
+*.log
+*.pid
+
+# Local configuration and secrets; safe templates may be versioned
+.env
+.env.*
+!.env.example
+!.env.*.example
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Runtime files and database volumes
+uploads/
+postgres-data/
+/runtime/
+
+# Local editor and operating system files
+.idea/
+.DS_Store
+Thumbs.db
