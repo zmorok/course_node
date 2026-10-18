@@ -37,4 +37,12 @@ SELECT NOT EXISTS (SELECT FROM workify.schema_migrations WHERE version = 2) AS a
     COMMIT;
 \endif
 
+SELECT NOT EXISTS (SELECT FROM workify.schema_migrations WHERE version = 3) AS apply_003 \gset
+\if :apply_003
+    BEGIN;
+    \ir migrations/003_auth_sessions.sql
+    INSERT INTO workify.schema_migrations (version, name) VALUES (3, 'auth_sessions');
+    COMMIT;
+\endif
+
 SELECT pg_advisory_unlock(173204, 2);
