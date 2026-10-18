@@ -8,7 +8,7 @@ button, input { font: inherit; }
 .brand { display: inline-flex; align-items: center; gap: 12px; font-weight: 750; font-size: 26px; letter-spacing: -1px; }
 .brand-mark { display: grid; place-items: center; width: 44px; height: 44px; color: #fff; background: #174b42; border-radius: 12px; font-size: 29px; padding-bottom: 5px; }
 .header-note { color: #727f75; font-size: 13px; }
-main { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr; gap: 76px; align-items: center; padding: 90px 0; }
+main { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr; gap: 76px; align-items: center; padding: clamp(20px, 4vh, 48px) 0; }
 .eyebrow { margin: 0 0 22px; color: #698375; text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
 h1 { margin: 0 0 25px; font-size: clamp(32px, 3.7vw, 49px); font-weight: 650; line-height: 1.14; letter-spacing: -1.7px; }
 .lead { color: #6a786e; line-height: 1.8; max-width: 440px; font-size: 15px; margin: 0 0 32px; }
@@ -40,8 +40,13 @@ footer { display: flex; justify-content: space-between; gap: 20px; border-top: 1
 .auth-description { font-size: 13px; color: #6a786e; line-height: 1.7; margin: 0 0 24px; }
 fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .form-fields { display: grid; gap: 17px; }
-.register-fields { grid-template-columns: 1fr 1fr; gap: 15px; }
-.register-fields .field-username, .register-fields .field-email, .register-fields .field-password, .register-fields .field-confirmPassword { grid-column: 1 / -1; }
+.register-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.auth-card-register { padding: 24px; }
+.auth-card-register .auth-tabs { margin-bottom: 20px; }
+.auth-card-register .auth-description { margin-bottom: 18px; }
+.auth-card-register .field input { padding: 10px 12px; }
+.auth-card-register .field label { margin-bottom: 6px; }
+.auth-card-register .show-password { margin: 14px 0 18px; }
 .field { min-width: 0; }
 .field label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 8px; }
 .field input { width: 100%; min-width: 0; background: #fafbf7; color: #183b35; border: 1px solid #d8e0d2; border-radius: 8px; padding: 12px 13px; font-size: 14px; }
@@ -66,6 +71,25 @@ fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
 .secondary:hover { background: #e1e9d7; }
 .account-message { margin: 18px 0 0; font-size: 12px; line-height: 1.6; }
 .restore-button { margin-top: 15px; }
+@media (min-width: 801px) and (max-width: 1100px) {
+  .page { padding-left: 32px; padding-right: 32px; }
+  main { grid-template-columns: minmax(0, 1fr) minmax(420px, 1.1fr); gap: 32px; }
+}
+@media (min-width: 801px) and (max-height: 800px) {
+  .page { padding-top: 16px; padding-bottom: 16px; }
+  main { padding: 16px 0; }
+  footer { padding-top: 12px; }
+  .auth-card-register { padding: 20px; }
+  .auth-card-register .auth-tabs { margin-bottom: 14px; }
+  .auth-card-register .tab { padding: 9px 8px; }
+  .auth-card-register h2 { margin-bottom: 6px; }
+  .auth-card-register .auth-description { margin-bottom: 14px; }
+  .auth-card-register .register-fields { gap: 10px 14px; }
+  .auth-card-register .field input { padding: 8px 12px; }
+  .auth-card-register .field label { margin-bottom: 4px; }
+  .auth-card-register .show-password { margin: 12px 0 14px; }
+  .auth-card-register .submit { padding-top: 12px; padding-bottom: 12px; }
+}
 @media (max-width: 800px) { .page { padding: 24px; } main { grid-template-columns: 1fr; gap: 36px; padding: 52px 0; } .workspace { transform: none; } .header-note { display: none; } }
 @media (max-width: 420px) { .workspace { padding: 22px; } h1 { letter-spacing: -1px; } footer { flex-direction: column; gap: 8px; } }
 @media (max-width: 420px) { .auth-card { padding: 22px; } .register-fields { grid-template-columns: 1fr; } main { padding: 40px 0; } }
