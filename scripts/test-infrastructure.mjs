@@ -69,7 +69,7 @@ try {
   assert.equal(await backendNode('console.log(process.getuid())'), '1000');
   assert.equal(await backendNode('console.log(process.env.PGHOST)'), 'postgres');
   assert.equal(await sql("SELECT current_setting('server_version_num')::int / 10000"), '17');
-  assert.equal(await sql('SELECT count(*) FROM workify.schema_migrations'), '3');
+  assert.equal(await sql('SELECT count(*) FROM workify.schema_migrations'), '4');
   assert.equal(await sql("SELECT count(*) FROM information_schema.tables WHERE table_schema='workify' AND table_type='BASE TABLE'"), '30');
   assert.equal(await sql('SELECT count(*) FROM workify.categories'), '8');
   assert.equal(await sql('SELECT count(*) FROM workify.skills'), '20');
@@ -117,6 +117,18 @@ try {
   assert.equal(publicProfile.skills[0].id, profileSkillId);
   assert(!Object.hasOwn(publicProfile, 'email')); assert(!Object.hasOwn(publicProfile, 'phone'));
   console.log('PASS: profile editing, persisted skills and private contact isolation through the frontend proxy');
+  const fileText='Портфолио: файл должен пережить замену контейнера';
+  const form=new FormData();form.append('file',new Blob([fileText],{type:'text/plain'}),'Результат.txt');
+  const uploaded=await request(`${frontend}/api/files`,{method:'POST',headers:authorization,body:form});
+  assert.equal(uploaded.status,201);
+  const storedFile=(await uploaded.json()).file;
+  assert.equal((await request(`${frontend}/api/files/${storedFile.id}`)).status,404,'Unattached uploads are private');
+  const portfolioCreated=await request(`${frontend}/api/me/portfolio`,{method:'POST',headers:{...authHeaders,...authorization},
+    body:JSON.stringify({title:'Проверка сохранности',description:'Файл и метаданные в разных хранилищах',links:['https://example.org'],fileIds:[storedFile.id]})});
+  assert.equal(portfolioCreated.status,201);
+  const portfolioId=(await portfolioCreated.json()).item.id;
+  assert.equal(await (await request(`${frontend}/api/files/${storedFile.id}`)).text(),fileText);
+  assert.equal((await (await request(`${frontend}/api/users/${account.user.id}/portfolio`)).json()).items[0].id,portfolioId);
   await compose('exec', '-T', 'backend', 'node', 'src/commands/promote-admin.js', account.user.email);
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 200);
   console.log('PASS: registration, HttpOnly cookie, current user and CLIENT restriction through the frontend proxy');
@@ -162,6 +174,10 @@ try {
   const persistedProfile = await (await request(`${frontend}/api/me/profile`, { headers: authorization })).json();
   assert.equal(persistedProfile.profile.headline, 'Сохранённый профиль');
   assert.equal(persistedProfile.profile.skills[0].id, profileSkillId);
+  const persistedFile=await request(`${frontend}/api/files/${storedFile.id}`,{headers:authorization});
+  assert.equal(persistedFile.status,200);assert.equal(await persistedFile.text(),fileText);
+  assert.equal(await sql(`SELECT count(*) FROM workify.portfolio_files WHERE portfolio_item_id='${portfolioId}' AND file_id='${storedFile.id}'`),'1');
+  console.log('PASS: API-uploaded bytes, metadata and portfolio attachments survive container replacement');
   assert.equal((await request(`${frontend}/api/auth/me`, { headers: authorization })).status, 200);
   const out = await request(`${frontend}/api/auth/logout`, { method: 'POST', headers: { ...authHeaders, Cookie: renewedCookie } });
   assert.equal(out.status, 204);

@@ -14,7 +14,8 @@ export async function startApp(context, apiRouter, options = {}) {
       const response = await fetch(`http://127.0.0.1:${server.address().port}${path}`, {
         ...options, signal: AbortSignal.timeout(5000),
       });
-      return { response, body: response.status === 204 ? null : await response.json() };
+      return { response, body: response.status === 204 ? null : response.headers.get('content-type')?.includes('application/json')
+        ? await response.json() : Buffer.from(await response.arrayBuffer()) };
     },
   };
 }
