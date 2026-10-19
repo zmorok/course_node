@@ -1,6 +1,6 @@
 # Запуск и инфраструктура Workify
 
-Docker Compose запускает три постоянных сервиса — frontend, backend и PostgreSQL 17 — и одноразовый migrate. Миграции 001/002 сохранены; этап 05 добавляет 003 для сессий, этап 06 использует существующую схему. [Каркас backend](backend.md) расширен [авторизацией](auth.md) и [профилем/навыками](profile.md); проекты, заказы и FileService относятся к следующим этапам.
+Docker Compose запускает три постоянных сервиса — frontend, backend и PostgreSQL 17 — и одноразовый migrate. Миграции 001/002 сохранены; 003 добавляет сессии, 004 — контрольную сумму и отложенное удаление файлов. [Каркас backend](backend.md) расширен [авторизацией](auth.md), [профилем/навыками](profile.md) и [FileService/портфолио](files-and-portfolio.md); проекты и заказы относятся к следующим этапам.
 
 ## Быстрый запуск
 
@@ -75,7 +75,7 @@ docker compose run --rm migrate
 | postgres_data | postgres:/var/lib/postgresql/data | Кластер, таблицы, справочники и журнал миграций |
 | uploads_data | backend:/app/uploads | Будущие загружаемые файлы, независимо от жизни контейнера |
 
-При стандартном имени проекта Docker создаёт workify_postgres_data и workify_uploads_data. Пересоздание `docker compose up -d --force-recreate --wait` заменяет контейнеры, сохраняя volumes. Каталог uploads не раздаётся как публичная статика: будущий FileService будет проверять доступ к каждому вложению. В БД остаются только метаданные файлов.
+При стандартном имени проекта Docker создаёт workify_postgres_data и workify_uploads_data. Пересоздание `docker compose up -d --force-recreate --wait` заменяет контейнеры, сохраняя volumes. Каталог uploads не раздаётся как публичная статика: FileService проверяет доступ к каждому вложению. В БД остаются только метаданные файлов.
 
 ## Health и диагностика
 
@@ -107,7 +107,7 @@ node scripts/test-infrastructure.mjs
 
 [Smoke runner](../scripts/test-infrastructure.mjs) использует отдельный случайный Compose project, самостоятельные credentials и свободные loopback-порты. Он не читает рабочий .env и не подключается к основным volumes. Проверяются:
 
-1. Сборка, здоровый запуск, Node.js 24, PostgreSQL 17, три миграции, таблицы и seed.
+1. Сборка, здоровый запуск, Node.js 24, PostgreSQL 17, четыре миграции, таблицы и seed.
 2. Frontend HTML/JS/CSS, SPA fallback, API proxy, отсутствие доступа к .env и uploads.
 3. Запись маркеров в БД и файловый volume, реальная замена контейнеров, сохранность обоих маркеров и неизменность журнала миграций.
 4. HTTP 503 при остановке PostgreSQL и восстановление соединения после старта.
@@ -115,14 +115,14 @@ node scripts/test-infrastructure.mjs
 
 В finally удаляются только ресурсы тестового проекта с проверкой project labels: контейнеры, его тестовые volumes и его image tags. Основной workify продолжает работать. Проверки самой схемы отдельно запускаются `node scripts/test-database.mjs` и описаны в [документации БД](database.md).
 
-Runner также проверяет JSON 404 с requestId через frontend proxy. Набор включает 49 unit-проверок backend, 27 интеграционных тестов на своей отдельной базе и 4 теста API-клиента. Через реальные контейнеры проверяются cookie, первый ADMIN, профиль/навыки/приватность контактов и сохранность данных после пересоздания backend. Тестовые маршруты создаются только внутри набора и не публикуются приложением.
+Runner также проверяет JSON 404 с requestId через frontend proxy. Набор включает 54 unit-проверки backend, 33 интеграционных теста на своей отдельной базе и 6 тестов API-клиента. Через реальные контейнеры проверяются cookie, первый ADMIN, профиль/навыки/приватность контактов и сохранность данных после пересоздания backend. Тестовые маршруты создаются только внутри набора и не публикуются приложением.
 
-Стартовая страница, формы авторизации и профиль проверены в браузере, включая узкую ширину, reload, выход и публичный просмотр без контактов. Загрузка файлов и переходы заказов добавляются в последующих этапах.
+Стартовая страница, формы авторизации, профиль и портфолио проверены в браузере, включая узкую ширину, загрузку аватара/вложения, отмену/reload, выход и гостевой просмотр. Smoke загружает файл через API, привязывает к работе и проверяет байты, метаданные и связь после реальной замены контейнеров. Переходы заказов добавляются в последующих этапах.
 
 ## Связь с предыдущими работами
 
 Изучены ППО `lab06/lab06-ppo-deployment diagram.drawio`, README ООП-приложения и старый `db/init.sql`; дополнительно сопоставлены `_материалы/Workify_STSR_Project_Specification_v4/infra/README.md` и `docs/06_system_architecture.md`. Корни исторических источников приведены в [предметной модели](domain-model.md).
 
-Сохранено разделение browser → API → PostgreSQL и файлового хранилища. Старые ASP.NET/EF, отдельный storage server/S3, moderator, платежи и демонстрационные пароли не переносятся. Для текущей курсовой используются React/Express/pg, два named volumes и роли CLIENT/ADMIN; файлы доступны через будущий общий FileService.
+Сохранено разделение browser → API → PostgreSQL и файлового хранилища. Старые ASP.NET/EF, отдельный storage server/S3, moderator, платежи и демонстрационные пароли не переносятся. Для текущей курсовой используются React/Express/pg, два named volumes и роли CLIENT/ADMIN; файлы доступны через общий FileService.
 
 Версии runtime и поведение сервера статики сверены с [официальной таблицей Node.js releases](https://nodejs.org/en/about/previous-releases) и [документацией Vite о static deployment](https://vite.dev/guide/static-deploy.html). Синтаксис маршрутов и proxy — с [Express 5](https://expressjs.com/en/guide/migrating-5/) и [http-proxy-middleware](https://github.com/chimurai/http-proxy-middleware).
