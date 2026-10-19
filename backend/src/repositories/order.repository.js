@@ -1,6 +1,6 @@
 const columns=`o.id,o.project_id,o.customer_id,o.freelancer_id,o.proposal_id,o.invitation_id,o.title_snapshot,o.agreed_price::text AS agreed_price,
   o.initial_deadline_at,o.deadline_at,o.status,o.created_at,o.updated_at,o.completed_at,o.cancelled_at,COALESCE(o.completed_at,o.cancelled_at) AS closed_at,
-  (o.deadline_at<clock_timestamp() AND o.status IN ('IN_PROGRESS','SUBMITTED','REVISION_REQUESTED')) AS is_overdue,
+  (o.deadline_at<statement_timestamp() AND o.status IN ('IN_PROGRESS','SUBMITTED','REVISION_REQUESTED')) AS is_overdue,
   p.status AS project_status,cu.username AS customer_username,cp.first_name AS customer_first_name,cp.last_name AS customer_last_name,
   fu.username AS freelancer_username,fp.first_name AS freelancer_first_name,fp.last_name AS freelancer_last_name`;
 const joins=`JOIN workify.projects p ON p.id=o.project_id JOIN workify.users cu ON cu.id=o.customer_id JOIN workify.profiles cp ON cp.user_id=cu.id
@@ -23,7 +23,9 @@ export function createOrderRepository(database){return {
       FROM workify.order_files ofile JOIN workify.stored_files f ON f.id=ofile.file_id WHERE ofile.order_id=o.id AND f.deleted_at IS NULL),'[]'::jsonb) AS files,
     submission.id AS last_submission_id,submission.version AS last_submission_version,submission.status AS last_submission_status,submission.created_at AS last_submission_created_at,
     deadline.id AS pending_deadline_id,deadline.previous_deadline_at,deadline.proposed_deadline_at,deadline.created_at AS deadline_request_created_at,
-    COALESCE(deadline.proposed_deadline_at>clock_timestamp() AND deadline.previous_deadline_at=o.deadline_at,false) AS deadline_request_current
+    statement_timestamp() AS server_now,COALESCE(deadline.proposed_deadline_at>statement_timestamp(),false) AS deadline_request_future,
+    COALESCE(deadline.previous_deadline_at=o.deadline_at,false) AS deadline_request_matches,
+    COALESCE(o.status IN ('IN_PROGRESS','REVISION_REQUESTED') AND deadline.proposed_deadline_at>statement_timestamp() AND deadline.previous_deadline_at=o.deadline_at,false) AS deadline_request_current
     FROM workify.orders o ${joins}
     LEFT JOIN LATERAL (SELECT id,version,status,created_at FROM workify.order_submissions WHERE order_id=o.id ORDER BY version DESC LIMIT 1) submission ON true
     LEFT JOIN LATERAL (SELECT id,previous_deadline_at,proposed_deadline_at,created_at FROM workify.order_deadline_requests WHERE order_id=o.id AND status='PENDING' LIMIT 1) deadline ON true
