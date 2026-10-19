@@ -124,7 +124,7 @@ asyncHandler передаёт в middleware синхронное исключе�
 node scripts/test-infrastructure.mjs
 ```
 
-Runner монтирует тесты read-only в отдельные контейнеры и запускает 74 unit-теста backend, 90 интеграционных тестов PostgreSQL 17 и 6 тестов API-клиента, затем проверяет React/API, volumes и восстановление сервисов. Интеграционный набор требует WORKIFY_DB_TESTS=1, задаваемый этим запуском. Тестовые volumes удаляются в finally; неизменяемые аудит и события откликов/заказов сохраняются до уничтожения отдельной тестовой БД. Рабочая база не используется.
+Runner монтирует тесты read-only в отдельные контейнеры и запускает 77 unit-тестов backend, 100 интеграционных тестов PostgreSQL 17 и 6 тестов API-клиента, затем проверяет React/API, volumes и восстановление сервисов. Интеграционный набор требует WORKIFY_DB_TESTS=1, задаваемый этим запуском. Тестовые volumes удаляются в finally; неизменяемые аудит и события откликов/заказов сохраняются до уничтожения отдельной тестовой БД. Рабочая база не используется.
 
 Unit-набор отдельно после сборки backend:
 
@@ -139,3 +139,5 @@ Unit-проверки не выполняют SQL: используются по
 Изучены ООП `DAL/UnitOfWork.cs`, `FreelanceApp/Services/DbContextFactory.cs`, `DAL/Repository/UserRepositories/UserOrdersRepository.cs` и `_материалы/Workify_STSR_Project_Specification_v4/docs/07_backend_architecture.md`, `12_security.md`. Корни источников приведены в [предметной модели](domain-model.md). Сохранены repository и единая транзакционная сессия; EF, WPF, fallback-пользователь и выбор привилегированной DB-роли по данным клиента не переносятся. Роли CLIENT/ADMIN проверяются backend начиная с этапа 05.
 
 Первичные источники: [Express error handling](https://expressjs.com/en/guide/error-handling/), [node-postgres transactions](https://node-postgres.com/features/transactions), [pg Pool API](https://node-postgres.com/apis/pool).
+
+[Отзывы по заказам](reviews.md) используют ReviewRouter → ReviewController → ReviewService → ReviewRepository с проверкой участия, терминального состояния и автора под транзакционными блокировками.

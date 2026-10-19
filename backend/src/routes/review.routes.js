@@ -1,0 +1,22 @@
+import {Router} from 'express';
+import {rateLimit} from 'express-rate-limit';
+import {authMiddleware,roleMiddleware} from '../middleware/auth.js';
+import {validate} from '../middleware/validate.js';
+import {asyncHandler} from '../utils/async-handler.js';
+import {AppError} from '../utils/app-error.js';
+import {orderParams,orderDetailQuery} from '../validators/orders.js';
+import {profileParams} from '../validators/profile.js';
+import {emptyCommand} from '../validators/projects.js';
+import {reviewInput,reviewParams,ownReviewQuery,publicReviewQuery} from '../validators/reviews.js';
+import {createReviewController} from '../controllers/review.controller.js';
+export function createReviewRouter(service,authService){const router=Router(),controller=createReviewController(service),auth=[authMiddleware(authService),roleMiddleware('CLIENT')];
+  const writes=rateLimit({windowMs:15*60*1000,limit:60,standardHeaders:'draft-8',legacyHeaders:false,handler:(_req,_res,next)=>next(new AppError(429,'RATE_LIMITED','Слишком много изменений отзывов. Повторите позже'))});
+  router.get('/users/:userId/reviews',validate(profileParams,'params'),validate(publicReviewQuery,'query'),asyncHandler(controller.public));
+  router.get('/me/reviews',...auth,validate(ownReviewQuery,'query'),asyncHandler(controller.own));
+  router.get('/orders/:orderId/reviews',...auth,validate(orderParams,'params'),validate(orderDetailQuery,'query'),asyncHandler(controller.order));
+  router.post('/orders/:orderId/reviews',...auth,writes,validate(orderParams,'params'),validate(orderDetailQuery,'query'),validate(reviewInput),asyncHandler(controller.create));
+  router.put('/reviews/:reviewId',...auth,writes,validate(reviewParams,'params'),validate(orderDetailQuery,'query'),validate(reviewInput),asyncHandler(controller.update));
+  router.delete('/reviews/:reviewId',...auth,writes,validate(reviewParams,'params'),validate(orderDetailQuery,'query'),validate(emptyCommand),asyncHandler(controller.hide));
+  router.post('/reviews/:reviewId/restore',...auth,writes,validate(reviewParams,'params'),validate(orderDetailQuery,'query'),validate(emptyCommand),asyncHandler(controller.restore));
+  return router;
+}

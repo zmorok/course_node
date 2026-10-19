@@ -30,6 +30,8 @@ import {createOrderRepository} from './repositories/order.repository.js';
 import {createOrderService} from './services/order.service.js';
 import {createOrderWorkRepository} from './repositories/order-work.repository.js';
 import {createOrderWorkService} from './services/order-work.service.js';
+import {createReviewRepository} from './repositories/review.repository.js';
+import {createReviewService} from './services/review.service.js';
 
 let pool;
 try {
@@ -59,7 +61,8 @@ try {
   const orderService=createOrderService({repository:createOrderRepository(pool)});
   const orderWorkService=createOrderWorkService({repository:createOrderWorkRepository(pool),orders:createOrderRepository(pool),fileService,
     transaction:operation=>withTransaction(pool,client=>operation(createOrderWorkRepository(client),createOrderRepository(client),createFileRepository(client)))});
-  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService });
+  const reviewService=createReviewService({repository:createReviewRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createReviewRepository(client)))});
+  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));

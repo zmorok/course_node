@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
 import {InvitationComposer} from './InvitationPages.jsx';
 import { AvatarEditor,PortfolioPanel } from './PortfolioPanel.jsx';
+import {PublicReviews} from './Reviews.jsx';
 
 const fieldDefinitions = [
   ['firstName', 'Имя', 100, 'text', 'given-name'], ['lastName', 'Фамилия', 100, 'text', 'family-name'],
@@ -159,6 +160,6 @@ export function PublicProfilePage({ userId,user }) {
       <div className="profile-ratings"><div><strong>{profile.customerRating ?? '—'}</strong><span>Как заказчик</span><small>Отзывов: {profile.customerReviewCount}</small></div>
         <div><strong>{profile.freelancerRating ?? '—'}</strong><span>Как исполнитель</span><small>Отзывов: {profile.freelancerReviewCount}</small></div></div></section>
       <div className="profile-editor"><section className="profile-card"><h2>О себе</h2><p className="public-description">{profile.description || 'Пользователь пока не добавил описание.'}</p></section>
-        <section className="profile-card"><h2>Навыки</h2>{profile.skills.length ? <div className="profile-tags">{profile.skills.map(skill => <span key={skill.id}>{skill.name}</span>)}</div> : <p className="profile-help">Навыки пока не указаны.</p>}</section><InvitationComposer key={`${profile.id}-${user?.id??'guest'}`} profile={profile} user={user}/><PortfolioPanel userId={userId}/></div></div>
+        <section className="profile-card"><h2>Навыки</h2>{profile.skills.length ? <div className="profile-tags">{profile.skills.map(skill => <span key={skill.id}>{skill.name}</span>)}</div> : <p className="profile-help">Навыки пока не указаны.</p>}</section><PublicReviews key={userId} userId={userId}/><InvitationComposer key={`${profile.id}-${user?.id??'guest'}`} profile={profile} user={user}/><PortfolioPanel userId={userId}/></div></div>
   </>;
 }

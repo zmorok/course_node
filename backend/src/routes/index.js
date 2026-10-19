@@ -9,8 +9,9 @@ import { createProposalRouter } from './proposal.routes.js';
 import {createFreelancerRouter} from './freelancer.routes.js';
 import {createInvitationRouter} from './invitation.routes.js';
 import {createOrderRouter} from './order.routes.js';
+import {createReviewRouter} from './review.routes.js';
 
-export function createApiRouter({ healthService, authService, authConfig, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService }) {
+export function createApiRouter({ healthService, authService, authConfig, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService }) {
   const router = Router();
   router.use(createHealthRouter(healthService));
   if (authService) router.use(createAuthRouter(authService, authConfig));
@@ -22,5 +23,6 @@ export function createApiRouter({ healthService, authService, authConfig, profil
   if(freelancerService)router.use(createFreelancerRouter(freelancerService));
   if(invitationService)router.use(createInvitationRouter(invitationService,authService));
   if(orderService)router.use(createOrderRouter(orderService,authService,orderWorkService));
+  if(reviewService)router.use(createReviewRouter(reviewService,authService));
   return router;
 }

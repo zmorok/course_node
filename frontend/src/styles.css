@@ -308,6 +308,13 @@ select:focus { outline:2px solid #507d64;outline-offset:2px; }
 .order-timeline time { font-size:11px;color:#728277; }
 .order-timeline h3 { font-size:15px;line-height:1.7;margin:8px 0; }
 .order-timeline p { font-size:12px;line-height:1.8;margin:6px 0; }
+.review-card { border-top:1px solid #dfe6d9;margin-top:24px;padding-top:22px;min-width:0; }
+.review-rating { color:#456342;background:#edf2e6;padding:7px 10px;border-radius:8px;font-size:16px;white-space:nowrap; }
+.review-people { font-size:12px;line-height:1.8;overflow-wrap:anywhere; }
+.review-order { display:inline-block;font-size:13px;margin-top:12px;overflow-wrap:anywhere; }
+.order-switch button { padding:12px 20px;border-radius:7px; }
+.order-switch button[aria-pressed=true] { background:white;box-shadow:0 2px 5px #183b3510; }
+@media(max-width:480px) { .order-switch button { flex:1;padding:12px 9px; } }
 .order-work-panel .portfolio-links li { padding:0;background:transparent; }
 .order-work-panel .portfolio-links a { overflow-wrap:anywhere; }
 @media(max-width:480px) { .order-work-form { padding:16px; } .order-work-panel .portfolio-heading { flex-direction:column;align-items:start;gap:16px; } }
