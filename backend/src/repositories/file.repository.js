@@ -31,7 +31,9 @@ export function createFileRepository(database) {
           JOIN workify.v_public_profiles customer ON customer.user_id=p.customer_id
           WHERE pf.file_id=f.id AND p.status='OPEN')
         OR EXISTS (SELECT 1 FROM workify.order_files ofile JOIN workify.orders o ON o.id=ofile.order_id
-          WHERE ofile.file_id=f.id AND $2::uuid IN (o.customer_id,o.freelancer_id)))`, [id, actorId ?? null])).rows[0];
+          WHERE ofile.file_id=f.id AND $2::uuid IN (o.customer_id,o.freelancer_id))
+        OR EXISTS (SELECT 1 FROM workify.submission_files sf JOIN workify.order_submissions s ON s.id=sf.submission_id
+          JOIN workify.orders o ON o.id=s.order_id WHERE sf.file_id=f.id AND $2::uuid IN (o.customer_id,o.freelancer_id)))`, [id, actorId ?? null])).rows[0];
     },
     async markUnusedDeleted(ids) {
       await database.query(`UPDATE workify.stored_files f SET deleted_at=clock_timestamp()

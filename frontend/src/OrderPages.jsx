@@ -1,6 +1,7 @@
 import React,{useEffect,useState} from 'react';
 import {api} from './api.js';
 import {FileLink} from './PortfolioPanel.jsx';
+import {OrderWorkPanel} from './OrderWorkPanel.jsx';
 const statuses={IN_PROGRESS:'В работе',SUBMITTED:'На проверке',REVISION_REQUESTED:'На доработке',COMPLETED:'Завершён',CANCELLED:'Отменён'};
 const histories=['COMPLETED','CANCELLED'];
 const active=['IN_PROGRESS','SUBMITTED','REVISION_REQUESTED'];
@@ -43,6 +44,7 @@ export function OrderDetailsPage({orderId,user}){
   if(!order)return <section className="profile-card"><h1>Не удалось открыть заказ</h1><ErrorMessage error={error}/>{error?.status!==404&&<button className="secondary" onClick={()=>setAttempt(value=>value+1)}>Повторить</button>}<a className="text-link" href="/me/orders">К своим заказам</a></section>;
   const messages={IN_PROGRESS:'Исполнитель выполняет согласованное задание.',SUBMITTED:'Результат передан заказчику на проверку.',REVISION_REQUESTED:'Результат возвращён исполнителю на доработку.',COMPLETED:'Заказчик принял работу. Соглашение сохранено в истории.',CANCELLED:'Работа по заказу прекращена. Согласованные условия сохранены в истории.'};
   const back=`/me/orders?mode=${order.participantMode}&scope=${histories.includes(order.status)?'history':'active'}`;
+  async function refreshWork(){const result=await api(`/orders/${encodeURIComponent(orderId)}`);setOrder(result.order);}
   return <><div className="profile-page-heading"><div><p className="eyebrow">{order.source.type==='proposal'?'Заказ по принятому отклику':'Заказ по принятому приглашению'}</p><h1 className="project-title">{order.title}</h1><OrderBadges order={order}/></div><a className="text-link" href={back}>← К своим заказам</a></div>
     <div className="project-detail-layout"><div className="profile-editor"><section className="profile-card"><h2>Согласованное задание</h2><p className="public-description">{order.description}</p><p className="profile-help">Описание и вложения зафиксированы при создании заказа.</p></section>
       <section className="profile-card"><h2>Файлы задания</h2>{order.files.length?<div className="attachment-list">{order.files.map(file=><FileLink key={file.id} file={file} privateFile/>)}</div>:<p className="profile-help">Вложений нет.</p>}</section>
@@ -51,6 +53,7 @@ export function OrderDetailsPage({orderId,user}){
         {order.pendingDeadlineRequest&&<p className="profile-help">{order.pendingDeadlineRequest.isCurrent?'Есть запрос изменения срока до':'Прежний запрос изменения срока больше не актуален. Предлагалась дата'} {date(order.pendingDeadlineRequest.proposedDeadlineAt)}.</p>}
       </section>
       {order.cancellationReason&&<section className="profile-card"><h2>Причина отмены</h2><p className="public-description">{order.cancellationReason}</p><p className="profile-help">{order.cancelledBy===order.customer.id?'Отменил заказчик':'Отказался исполнитель'} · {date(order.cancelledAt)}</p></section>}
+      <OrderWorkPanel key={order.id} order={order} onChange={refreshWork}/>
     </div><aside className="profile-card project-summary"><p className="eyebrow">Условия и участники</p><p className="project-budget">{price(order.agreedPrice)}</p><dl><dt>Текущий срок</dt><dd>{date(order.deadlineAt)}</dd><dt>Первоначальный срок</dt><dd>{date(order.initialDeadlineAt)}</dd><dt>Заказчик</dt><dd><a className="text-link" href={`/users/${order.customer.id}`}>{order.customer.firstName} {order.customer.lastName}</a></dd><dt>Исполнитель</dt><dd><a className="text-link" href={`/users/${order.freelancer.id}`}>{order.freelancer.firstName} {order.freelancer.lastName}</a></dd><dt>Создан</dt><dd>{date(order.createdAt)}</dd>{order.completedAt&&<><dt>Завершён</dt><dd>{date(order.completedAt)}</dd></>}</dl>
       <div className="project-owner-actions"><button className="secondary" onClick={()=>setAttempt(value=>value+1)}>Обновить заказ ↻</button>{(order.participantMode==='customer'||order.project.status==='OPEN')&&<a className="text-link" href={`/projects/${order.project.id}`}>Карточка проекта ↗</a>}</div>
     </aside></div></>;

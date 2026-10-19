@@ -177,6 +177,19 @@ try {
   assert.equal((await request(`${frontend}/api/orders/${agreement.id}`)).status,401);
   assert.equal((await request(`${frontend}/api/orders/${agreement.id}`,{method:'PATCH',headers:authorHeaders,body:JSON.stringify({status:'COMPLETED'})})).status,404);
   console.log('PASS: customer/freelancer order lists, empty history, private snapshots, action matrix and rejection of arbitrary status changes');
+  const orderPath=`${frontend}/api/orders/${agreement.id}`;
+  const deadlineResponse=await request(`${orderPath}/deadline-requests`,{method:'POST',headers:authorHeaders,body:JSON.stringify({proposedDeadlineAt:new Date(Date.now()+40*86400000).toISOString(),reason:'Дополнительная проверка результата'})});assert.equal(deadlineResponse.status,201);const deadlineRequest=await deadlineResponse.json();
+  assert.equal((await request(`${orderPath}/deadline-requests/${deadlineRequest.requestId}/approve`,{method:'POST',headers:{...authHeaders,...authorization},body:'{}'})).status,200);
+  const resultText='Сохранённая первая версия результата';const resultForm=new FormData();resultForm.append('file',new Blob([resultText],{type:'text/plain'}),'Результат.txt');const resultUpload=await request(`${frontend}/api/files`,{method:'POST',headers:{Authorization:authorHeaders.Authorization},body:resultForm});assert.equal(resultUpload.status,201);const resultFile=(await resultUpload.json()).file;
+  const pendingResponse=await request(`${orderPath}/deadline-requests`,{method:'POST',headers:authorHeaders,body:JSON.stringify({proposedDeadlineAt:new Date(Date.now()+50*86400000).toISOString(),reason:'Проверка закрытия при сдаче'})});assert.equal(pendingResponse.status,201);const pendingRequest=await pendingResponse.json();
+  const firstResult=await request(`${orderPath}/submissions`,{method:'POST',headers:authorHeaders,body:JSON.stringify({comment:'Первая версия',fileIds:[resultFile.id]})});assert.equal(firstResult.status,201);const firstVersion=await firstResult.json();
+  assert.equal((await request(`${orderPath}/deadline-requests/${pendingRequest.requestId}/approve`,{method:'POST',headers:{...authHeaders,...authorization},body:'{}'})).status,409);
+  assert.equal((await request(`${orderPath}/submissions/${firstVersion.submissionId}/revision`,{method:'POST',headers:{...authHeaders,...authorization},body:JSON.stringify({comment:'Исправить замечания'})})).status,200);
+  const nextResult=await request(`${orderPath}/submissions`,{method:'POST',headers:authorHeaders,body:JSON.stringify({comment:'Исправленная версия',links:['https://example.org/result']})});assert.equal(nextResult.status,201);const nextVersion=await nextResult.json();assert.equal(nextVersion.version,2);
+  assert.equal((await request(`${orderPath}/submissions/${firstVersion.submissionId}/accept`,{method:'POST',headers:{...authHeaders,...authorization},body:'{}'})).status,409);
+  assert.equal((await request(`${orderPath}/submissions/${nextVersion.submissionId}/accept`,{method:'POST',headers:{...authHeaders,...authorization},body:'{}'})).status,200);
+  assert.equal(await (await request(`${frontend}/api/files/${resultFile.id}`,{headers:authorization})).text(),resultText);assert.equal((await request(`${frontend}/api/files/${resultFile.id}`)).status,404);
+  console.log('PASS: deadline approval, pending expiry, private version files, revision, resubmission and atomic acceptance through the proxy');
   await compose('exec', '-T', 'backend', 'node', 'src/commands/promote-admin.js', account.user.email);
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 200);
   assert.equal((await request(`${frontend}/api/me/orders`,{headers:authorization})).status,403);
@@ -229,14 +242,18 @@ try {
   console.log('PASS: API-uploaded bytes, metadata and portfolio attachments survive container replacement');
   const persistedProjectResponse=await request(`${frontend}/api/projects/${draftProject.id}`,{headers:authorization});assert.equal(persistedProjectResponse.status,200);
   const persistedProject=(await persistedProjectResponse.json()).project;
-  assert.equal(persistedProject.status,'IN_PROGRESS');assert.equal(persistedProject.budget,'2500.00');assert.equal(persistedProject.files[0].id,projectFile.id);
+  assert.equal(persistedProject.status,'COMPLETED');assert.equal(persistedProject.budget,'2500.00');assert.equal(persistedProject.files[0].id,projectFile.id);
   assert.equal(await (await request(`${frontend}/api/files/${projectFile.id}`,{headers:authorization})).text(),'Задание проекта');
   const persistedOfferResponse=await request(`${frontend}/api/proposals/${proposal.id}`,{headers:authorHeaders});assert.equal(persistedOfferResponse.status,200);
   const persistedOffer=(await persistedOfferResponse.json()).proposal;assert.equal(persistedOffer.status,'ACCEPTED');assert.equal(persistedOffer.order.id,agreement.id);assert.equal(persistedOffer.order.agreedPrice,'2100.50');
   assert.equal(await (await request(`${frontend}/api/files/${projectFile.id}`,{headers:authorHeaders})).text(),'Задание проекта');
   console.log('PASS: assigned project, accepted proposal, agreement snapshot and private attachment survive container replacement');
-  const restoredOrders=await (await request(`${frontend}/api/me/orders?mode=freelancer`,{headers:authorHeaders})).json();assert.equal(restoredOrders.total,2);
-  for(const id of [agreement.id,invitationOrder.id]){const response=await request(`${frontend}/api/orders/${id}`,{headers:authorHeaders});assert.equal(response.status,200);const order=(await response.json()).order;assert.equal(order.status,'IN_PROGRESS');assert.equal(order.permissions.submit,true);}
+  const restoredOrders=await (await request(`${frontend}/api/me/orders?mode=freelancer`,{headers:authorHeaders})).json();assert.equal(restoredOrders.total,1);
+  assert.equal((await (await request(`${frontend}/api/me/orders?mode=freelancer&scope=history`,{headers:authorHeaders})).json()).total,1);
+  for(const id of [agreement.id,invitationOrder.id]){const response=await request(`${frontend}/api/orders/${id}`,{headers:authorHeaders});assert.equal(response.status,200);const order=(await response.json()).order;assert.equal(order.status,id===agreement.id?'COMPLETED':'IN_PROGRESS');assert.equal(order.permissions.submit,id!==agreement.id);}
+  const restoredVersions=await (await request(`${frontend}/api/orders/${agreement.id}/submissions`,{headers:authorHeaders})).json();assert.equal(restoredVersions.total,2);assert.equal(restoredVersions.items[0].status,'ACCEPTED');assert.equal(restoredVersions.items[1].reviewComment,'Исправить замечания');assert.equal(restoredVersions.items[1].files[0].id,resultFile.id);assert.equal(await (await request(`${frontend}/api/files/${resultFile.id}`,{headers:authorHeaders})).text(),resultText);
+  const restoredDeadlines=await (await request(`${frontend}/api/orders/${agreement.id}/deadline-requests`,{headers:authorHeaders})).json();assert.equal(restoredDeadlines.total,2);assert.equal(restoredDeadlines.items[0].status,'EXPIRED');assert.equal(restoredDeadlines.items[1].status,'APPROVED');
+  console.log('PASS: versions, reviewer comments, private result bytes, deadline decisions and completed order/project survive container replacement');
   console.log('PASS: both order sources, participant mode and action matrix survive container replacement');
   const persistedInvitationResponse=await request(`${frontend}/api/invitations/${invitation.id}`,{headers:authorHeaders});assert.equal(persistedInvitationResponse.status,200);const persistedInvitation=(await persistedInvitationResponse.json()).invitation;
   assert.equal(persistedInvitation.status,'ACCEPTED');assert.equal(persistedInvitation.project.status,'IN_PROGRESS');assert.equal(persistedInvitation.order.id,invitationOrder.id);assert.equal(persistedInvitation.order.agreedPrice,'1900.75');
