@@ -9,6 +9,8 @@ import { createAuthRepository } from './repositories/auth.repository.js';
 import { withTransaction } from './repositories/transaction.js';
 import { createAuthService } from './services/auth.service.js';
 import { createAccessTokens } from './utils/tokens.js';
+import { createProfileRepository } from './repositories/profile.repository.js';
+import { createProfileService } from './services/profile.service.js';
 
 let pool;
 try {
@@ -20,7 +22,9 @@ try {
   const authService = await createAuthService({ repository: createAuthRepository(pool),
     transaction: operation => withTransaction(pool, client => operation(createAuthRepository(client))),
     accessTokens: createAccessTokens(config.auth), sessionTtlDays: config.auth.sessionTtlDays });
-  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth });
+  const profileService = createProfileService({ repository: createProfileRepository(pool),
+    transaction: operation => withTransaction(pool, client => operation(createProfileRepository(client))) });
+  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));

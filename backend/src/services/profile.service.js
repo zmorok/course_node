@@ -1,0 +1,68 @@
+import { AppError, ValidationError } from '../utils/app-error.js';
+import { verifyPassword } from '../utils/password.js';
+
+const missing = () => new AppError(404, 'PROFILE_NOT_FOUND', 'Профиль не найден');
+function ownProfile(row) {
+  return { id: row.id, email: row.email, username: row.username, firstName: row.first_name, lastName: row.last_name,
+    headline: row.headline, description: row.description, phone: row.phone, city: row.city, country: row.country,
+    skills: row.skills, createdAt: row.created_at, updatedAt: row.updated_at };
+}
+function requireActive(user) {
+  if (!user) throw missing();
+  if (user.status === 'BLOCKED' && (!user.blocked_until || new Date(user.blocked_until).getTime() > Date.now())) {
+    throw new AppError(403, 'ACCOUNT_BLOCKED', 'Аккаунт заблокирован');
+  }
+}
+export function createProfileService({ repository, transaction }) {
+  return {
+    async getOwn(actor) {
+      const row = await repository.findOwn(actor.id);
+      if (!row) throw missing();
+      return ownProfile(row);
+    },
+    async getPublic(userId) {
+      const row = await repository.findPublic(userId);
+      if (!row) throw missing();
+      return { id: row.user_id, username: row.username, firstName: row.first_name, lastName: row.last_name,
+        headline: row.headline, description: row.description, city: row.city, country: row.country,
+        skills: row.skills, avatarFileId: row.avatar_file_id,
+        customerRating: row.customer_rating, customerReviewCount: Number(row.customer_review_count),
+        freelancerRating: row.freelancer_rating, freelancerReviewCount: Number(row.freelancer_review_count) };
+    },
+    async updateOwn(actor, input) {
+      try {
+        return await transaction(async repo => {
+          const user = await repo.lockAccount(actor.id);
+          requireActive(user);
+          const { currentPassword, ...patch } = input;
+          if (patch.email && patch.email.toLowerCase() !== user.email.toLowerCase()) {
+            if (!currentPassword) throw new ValidationError([{ field: 'body.currentPassword', message: 'Для смены email нужен текущий пароль' }]);
+            if (!await verifyPassword(user.password_hash, currentPassword)) {
+              throw new AppError(403, 'INVALID_CURRENT_PASSWORD', 'Текущий пароль указан неверно', {
+                details: [{ field: 'body.currentPassword', message: 'Проверьте текущий пароль' }],
+              });
+            }
+          }
+          await repo.updateAccount(actor.id, patch);
+          await repo.updateProfile(actor.id, patch);
+          return ownProfile(await repo.findOwn(actor.id));
+        });
+      } catch (error) {
+        if (error.code === '23505') throw new AppError(409, 'PROFILE_CONFLICT', 'Email или имя пользователя уже заняты');
+        throw error;
+      }
+    },
+    async listSkills() { return repository.listSkills(); },
+    async replaceSkills(actor, ids) {
+      return transaction(async repo => {
+        const user = await repo.lockAccount(actor.id);
+        requireActive(user);
+        if (user.role !== 'CLIENT') throw new AppError(403, 'FORBIDDEN', 'Навыки доступны аккаунту клиента');
+        const existing = await repo.findSkillIds(ids);
+        if (existing.length !== ids.length) throw new ValidationError([{ field: 'body.skillIds', message: 'Выберите навыки из справочника' }]);
+        await repo.replaceSkills(actor.id, ids);
+        return ownProfile(await repo.findOwn(actor.id));
+      });
+    },
+  };
+}
