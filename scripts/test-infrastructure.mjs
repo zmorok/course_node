@@ -198,6 +198,19 @@ try {
   assert.equal((await request(`${frontend}/api/orders/${invitationOrder.id}`,{headers:replacementHeaders})).status,404);
   const cancelledTimeline=await (await request(`${frontend}/api/orders/${invitationOrder.id}/events`,{headers:authorHeaders})).json();assert.equal(cancelledTimeline.items[0].type,'ORDER_CANCELLED');assert.equal(cancelledTimeline.items[0].metadata.reason,'Исполнитель отказался от работы');
   console.log('PASS: cancellation, project reopening, replacement freelancer, private old history and event timeline through the proxy');
+  const reviewsPath=`${frontend}/api/orders/${agreement.id}/reviews`;
+  const ownerReviewResponse=await request(reviewsPath,{method:'POST',headers:{...authHeaders,...authorization},body:JSON.stringify({rating:5,text:'Результат принят после доработки'})});assert.equal(ownerReviewResponse.status,201);const ownerReview=(await ownerReviewResponse.json()).review;assert.equal(ownerReview.recipient.id,author.user.id);
+  assert.equal((await request(reviewsPath,{method:'POST',headers:authorHeaders,body:JSON.stringify({rating:4,text:'Заказчик предоставил подробные замечания'})})).status,201);
+  assert.equal((await request(`${frontend}/api/orders/${invitationOrder.id}/reviews`,{method:'POST',headers:{...authHeaders,...authorization},body:JSON.stringify({rating:3,text:'Работа отменена, причины обсуждены'})})).status,201);
+  assert.equal((await request(`${frontend}/api/orders/${invitationOrder.id}/reviews`,{method:'POST',headers:authorHeaders,body:JSON.stringify({rating:5,text:'Заказчик спокойно принял отказ'})})).status,201);
+  assert.equal((await request(`${frontend}/api/reviews/${ownerReview.id}`,{method:'DELETE',headers:authorization})).status,200);
+  assert.equal((await request(reviewsPath,{method:'POST',headers:{...authHeaders,...authorization},body:JSON.stringify({rating:5,text:'Второй отзыв запрещён'})})).status,409);
+  assert.equal((await request(`${frontend}/api/reviews/${ownerReview.id}`,{method:'PUT',headers:{...authHeaders,...authorization},body:JSON.stringify({rating:4,text:'Обновлённый отзыв о результате'})})).status,200);
+  assert.equal((await request(`${frontend}/api/reviews/${ownerReview.id}/restore`,{method:'POST',headers:{...authHeaders,...authorization},body:'{}'})).status,200);
+  const publicReviews=await (await request(`${frontend}/api/users/${author.user.id}/reviews?mode=freelancer`)).json();assert.equal(publicReviews.total,2);assert.equal(publicReviews.rating,'3.50');assert(!Object.hasOwn(publicReviews.items[0].order,'title'));
+  assert.equal((await (await request(`${frontend}/api/users/${account.user.id}`)).json()).profile.customerRating,'4.50');
+  assert.equal((await (await request(`${frontend}/api/me/reviews?mode=freelancer&direction=received`,{headers:authorHeaders})).json()).total,2);
+  console.log('PASS: reciprocal reviews, server targets, author editing/hiding/restoration and database-backed role ratings through the proxy');
   await compose('exec', '-T', 'backend', 'node', 'src/commands/promote-admin.js', account.user.email);
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 200);
   assert.equal((await request(`${frontend}/api/me/orders`,{headers:authorization})).status,403);
@@ -261,6 +274,9 @@ try {
   for(const id of [agreement.id,invitationOrder.id]){const response=await request(`${frontend}/api/orders/${id}`,{headers:authorHeaders});assert.equal(response.status,200);const order=(await response.json()).order;assert.equal(order.status,id===agreement.id?'COMPLETED':'CANCELLED');assert.equal(order.permissions.submit,false);}
   const restoredReplacement=await request(`${frontend}/api/orders/${replacementOrder.id}`,{headers:replacementHeaders});assert.equal(restoredReplacement.status,200);assert.equal((await restoredReplacement.json()).order.status,'IN_PROGRESS');
   const restoredTimeline=await (await request(`${frontend}/api/orders/${invitationOrder.id}/events`,{headers:authorHeaders})).json();assert.equal(restoredTimeline.items[0].type,'ORDER_CANCELLED');
+  const persistedReviews=await (await request(`${frontend}/api/users/${author.user.id}/reviews?mode=freelancer`)).json();assert.equal(persistedReviews.total,2);assert.equal(persistedReviews.rating,'3.50');assert(persistedReviews.items.some(row=>row.id===ownerReview.id&&row.text==='Обновлённый отзыв о результате'));
+  assert.equal((await (await request(`${frontend}/api/orders/${agreement.id}/reviews`,{headers:authorHeaders})).json()).items.length,2);
+  console.log('PASS: public reviews, private order feedback and recalculated ratings survive container replacement');
   const restoredVersions=await (await request(`${frontend}/api/orders/${agreement.id}/submissions`,{headers:authorHeaders})).json();assert.equal(restoredVersions.total,2);assert.equal(restoredVersions.items[0].status,'ACCEPTED');assert.equal(restoredVersions.items[1].reviewComment,'Исправить замечания');assert.equal(restoredVersions.items[1].files[0].id,resultFile.id);assert.equal(await (await request(`${frontend}/api/files/${resultFile.id}`,{headers:authorHeaders})).text(),resultText);
   const restoredDeadlines=await (await request(`${frontend}/api/orders/${agreement.id}/deadline-requests`,{headers:authorHeaders})).json();assert.equal(restoredDeadlines.total,2);assert.equal(restoredDeadlines.items[0].status,'EXPIRED');assert.equal(restoredDeadlines.items[1].status,'APPROVED');
   console.log('PASS: versions, reviewer comments, private result bytes, deadline decisions and completed order/project survive container replacement');
