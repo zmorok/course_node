@@ -10,8 +10,8 @@ app.use(createProxyMiddleware({
   pathFilter: pathname => pathname === '/api' || pathname.startsWith('/api/'),
   target: process.env.BACKEND_URL || 'http://backend:3000',
   changeOrigin: true,
-  proxyTimeout: 10000,
-  timeout: 15000,
+  proxyTimeout: 60000,
+  timeout: 65000,
   on: {
     error: (_error, _request, response) => {
       if (!response.headersSent) {
