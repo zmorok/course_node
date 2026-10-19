@@ -280,6 +280,24 @@ select:focus { outline:2px solid #507d64;outline-offset:2px; }
 .invitation-tabs a { padding-bottom:8px; }
 .invitation-tabs a[aria-current=page] { border-bottom:2px solid #477456; }
 .status-declined,.status-expired { background:#f3ede5;color:#8b6b50; }
+.order-controls { margin-bottom:24px; }
+.order-switch { display:flex;gap:6px;background:#eff2e9;padding:5px;border-radius:10px;width:fit-content;max-width:100%;margin-bottom:22px; }
+.order-switch a { padding:12px 22px;border-radius:7px;font-size:13px;text-align:center; }
+.order-switch a[aria-current=page] { background:white;box-shadow:0 2px 5px #183b3510; }
+.order-toolbar { display:flex;flex-wrap:wrap;gap:18px;align-items:end;justify-content:space-between; }
+.order-toolbar form { display:flex;align-items:end;gap:12px;flex-wrap:wrap;max-width:100%; }
+.order-toolbar .field { width:230px;max-width:100%; }
+.order-card h2 { font-size:23px;line-height:1.5;overflow-wrap:anywhere;margin:18px 0 12px; }
+.order-card h2 a:hover { text-decoration:underline;text-underline-offset:4px; }
+.order-person { font-size:13px;line-height:1.8;overflow-wrap:anywhere; }
+.order-mode { color:#728277;font-size:11px; }
+.order-overdue { background:#fff1e9;color:#9d5634;border-radius:6px;padding:5px 8px;font-size:10px; }
+.order-overdue-note { padding:14px;border-left:3px solid #cf9973;background:#fff8f0;font-size:13px;line-height:1.7; }
+.order-closed { font-size:11px;color:#728277;line-height:1.6;margin-bottom:0; }
+.order-agreement-link { display:inline-block;margin-top:18px; }
+.status-submitted { background:#f5f0da;color:#816d2b; }
+.status-revision_requested { background:#f6e9e4;color:#8d5841; }
+@media(max-width:480px) { .order-switch { width:100%; } .order-switch a { flex:1;padding:12px 9px; } .order-toolbar form,.order-toolbar .field { width:100%; } .order-card h2 { font-size:21px; } }
 @media(max-width:800px) { .header .profile-nav { width:100%; } }
 @media(max-width:480px) { .freelancer-heading { gap:12px; } .freelancer-rating { width:100%;margin-left:0; } .freelancer-heading h2 { font-size:19px; } }
 @media(max-width:480px) { .proposal-terms { grid-template-columns:1fr; } .proposal-confirm,.proposal-agreement { padding:16px; } .proposal-actions { flex-direction:column;align-items:stretch; } .proposal-actions button { justify-content:center; } .proposal-actions .text-button { text-align:left; } }
