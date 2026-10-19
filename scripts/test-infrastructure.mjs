@@ -129,6 +129,20 @@ try {
   const portfolioId=(await portfolioCreated.json()).item.id;
   assert.equal(await (await request(`${frontend}/api/files/${storedFile.id}`)).text(),fileText);
   assert.equal((await (await request(`${frontend}/api/users/${account.user.id}/portfolio`)).json()).items[0].id,portfolioId);
+  const categories=(await (await request(`${frontend}/api/categories`)).json()).categories;
+  const projectForm=new FormData();projectForm.append('file',new Blob(['Задание проекта'],{type:'text/plain'}),'Задание.txt');
+  const projectUpload=await request(`${frontend}/api/files`,{method:'POST',headers:authorization,body:projectForm});assert.equal(projectUpload.status,201);
+  const projectFile=(await projectUpload.json()).file;
+  const draftResponse=await request(`${frontend}/api/projects`,{method:'POST',headers:{...authHeaders,...authorization},
+    body:JSON.stringify({title:`smoke-project-${authSuffix}`,description:'Разработать API проекта',categoryId:categories[0].id,budget:'2500.00',skillIds:[profileSkillId],fileIds:[projectFile.id]})});
+  assert.equal(draftResponse.status,201);const draftProject=(await draftResponse.json()).project;
+  assert.equal((await request(`${frontend}/api/projects/${draftProject.id}`)).status,404);
+  assert.equal((await request(`${frontend}/api/files/${projectFile.id}`)).status,404);
+  const publishResponse=await request(`${frontend}/api/projects/${draftProject.id}/publish`,{method:'POST',headers:{...authHeaders,...authorization},body:'{}'});assert.equal(publishResponse.status,200);
+  const projectSearch=await request(`${frontend}/api/projects?search=${authSuffix}&category=${categories[0].slug}&minBudget=2000&sort=budget_desc`,{headers:authorization});
+  const projectResults=await projectSearch.json();assert.equal(projectResults.total,1);assert.equal(projectResults.items[0].id,draftProject.id);assert.equal(projectResults.items[0].isOwn,true);
+  assert.equal(await (await request(`${frontend}/api/files/${projectFile.id}`)).text(),'Задание проекта');
+  console.log('PASS: draft privacy, publication, server-side project filters, ownership badge and attachments through the proxy');
   await compose('exec', '-T', 'backend', 'node', 'src/commands/promote-admin.js', account.user.email);
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 200);
   console.log('PASS: registration, HttpOnly cookie, current user and CLIENT restriction through the frontend proxy');
@@ -178,6 +192,11 @@ try {
   assert.equal(persistedFile.status,200);assert.equal(await persistedFile.text(),fileText);
   assert.equal(await sql(`SELECT count(*) FROM workify.portfolio_files WHERE portfolio_item_id='${portfolioId}' AND file_id='${storedFile.id}'`),'1');
   console.log('PASS: API-uploaded bytes, metadata and portfolio attachments survive container replacement');
+  const persistedProjectResponse=await request(`${frontend}/api/projects/${draftProject.id}`,{headers:authorization});assert.equal(persistedProjectResponse.status,200);
+  const persistedProject=(await persistedProjectResponse.json()).project;
+  assert.equal(persistedProject.status,'OPEN');assert.equal(persistedProject.budget,'2500.00');assert.equal(persistedProject.files[0].id,projectFile.id);
+  assert.equal(await (await request(`${frontend}/api/files/${projectFile.id}`,{headers:authorization})).text(),'Задание проекта');
+  console.log('PASS: published project, skills, budget and attachment survive container replacement');
   assert.equal((await request(`${frontend}/api/auth/me`, { headers: authorization })).status, 200);
   const out = await request(`${frontend}/api/auth/logout`, { method: 'POST', headers: { ...authHeaders, Cookie: renewedCookie } });
   assert.equal(out.status, 204);

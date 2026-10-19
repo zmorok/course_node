@@ -26,7 +26,10 @@ export function createFileRepository(database) {
         AND (f.uploaded_by=$2::uuid OR EXISTS (SELECT 1 FROM workify.profile_files pf
           JOIN workify.v_public_profiles p ON p.user_id=pf.user_id WHERE pf.file_id=f.id)
         OR EXISTS (SELECT 1 FROM workify.portfolio_files pf JOIN workify.portfolio_items i ON i.id=pf.portfolio_item_id
-          JOIN workify.v_public_profiles p ON p.user_id=i.user_id WHERE pf.file_id=f.id))`, [id, actorId ?? null])).rows[0];
+          JOIN workify.v_public_profiles p ON p.user_id=i.user_id WHERE pf.file_id=f.id)
+        OR EXISTS (SELECT 1 FROM workify.project_files pf JOIN workify.projects p ON p.id=pf.project_id
+          JOIN workify.v_public_profiles customer ON customer.user_id=p.customer_id
+          WHERE pf.file_id=f.id AND p.status='OPEN'))`, [id, actorId ?? null])).rows[0];
     },
     async markUnusedDeleted(ids) {
       await database.query(`UPDATE workify.stored_files f SET deleted_at=clock_timestamp()
