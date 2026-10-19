@@ -15,15 +15,17 @@ export class ApiError extends Error {
     this.details = data?.error?.details ?? [];
   }
 }
-async function send(path, { method = 'GET', body } = {}) {
+async function send(path, { method = 'GET', body, responseType } = {}) {
   let response;
+  const multipart = body instanceof FormData;
   try {
-    response = await fetch(`/api${path}`, { method, credentials: 'same-origin', signal: AbortSignal.timeout(10000),
-      headers: { ...(body ? { 'Content-Type': 'application/json' } : {}),
+    response = await fetch(`/api${path}`, { method, credentials: 'same-origin', signal: AbortSignal.timeout(multipart ? 60000 : 10000),
+      headers: { ...(body && !multipart ? { 'Content-Type': 'application/json' } : {}),
         ...(method !== 'GET' ? { 'X-Workify-Client': 'browser' } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
-      ...(body ? { body: JSON.stringify(body) } : {}) });
+      ...(body ? { body: multipart ? body : JSON.stringify(body) } : {}) });
   } catch { throw new ApiError(0); }
+  if (response.ok && responseType === 'blob') return response.blob();
   const data = response.status === 204 ? null : await response.json().catch(() => null);
   if (!response.ok) throw new ApiError(response.status, data);
   return data;
