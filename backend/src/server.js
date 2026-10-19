@@ -11,6 +11,11 @@ import { createAuthService } from './services/auth.service.js';
 import { createAccessTokens } from './utils/tokens.js';
 import { createProfileRepository } from './repositories/profile.repository.js';
 import { createProfileService } from './services/profile.service.js';
+import { createFileRepository } from './repositories/file.repository.js';
+import { createFileService } from './services/file.service.js';
+import { createLocalStorage } from './storage/local-storage.js';
+import { createPortfolioRepository } from './repositories/portfolio.repository.js';
+import { createPortfolioService } from './services/portfolio.service.js';
 
 let pool;
 try {
@@ -24,7 +29,13 @@ try {
     accessTokens: createAccessTokens(config.auth), sessionTtlDays: config.auth.sessionTtlDays });
   const profileService = createProfileService({ repository: createProfileRepository(pool),
     transaction: operation => withTransaction(pool, client => operation(createProfileRepository(client))) });
-  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService });
+  const fileService = createFileService({ repository: createFileRepository(pool), storage: createLocalStorage(config.uploadDir),
+    transaction: operation => withTransaction(pool, client => operation(createFileRepository(client))) });
+  await fileService.drainDeletes();
+  const cleanupTimer = setInterval(() => fileService.drainDeletes(), 60_000).unref();
+  const portfolioService = createPortfolioService({ repository: createPortfolioRepository(pool), fileService,
+    transaction: operation => withTransaction(pool, client => operation(createPortfolioRepository(client), createFileRepository(client))) });
+  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));
@@ -35,6 +46,7 @@ try {
   const shutdown = () => {
     if (shuttingDown) return;
     shuttingDown = true;
+    clearInterval(cleanupTimer);
     const timeout = setTimeout(() => process.exit(1), 10000).unref();
     server.close(async () => {
       try {

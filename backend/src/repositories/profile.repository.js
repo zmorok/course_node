@@ -15,7 +15,8 @@ export function createProfileRepository(database) {
   return {
     async findOwn(userId) {
       return (await database.query(`SELECT u.id, u.email, u.username, p.first_name, p.last_name,
-        p.headline, p.description, p.phone, p.city, p.country, p.created_at, p.updated_at, ${skills}
+        p.headline, p.description, p.phone, p.city, p.country, p.created_at, p.updated_at,
+        (SELECT file_id FROM workify.profile_files WHERE user_id=p.user_id) AS avatar_file_id, ${skills}
         FROM workify.users u JOIN workify.profiles p ON p.user_id = u.id WHERE u.id = $1`, [userId])).rows[0];
     },
     async findPublic(userId) {

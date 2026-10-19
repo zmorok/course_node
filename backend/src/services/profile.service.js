@@ -5,7 +5,7 @@ const missing = () => new AppError(404, 'PROFILE_NOT_FOUND', 'Профиль н�
 function ownProfile(row) {
   return { id: row.id, email: row.email, username: row.username, firstName: row.first_name, lastName: row.last_name,
     headline: row.headline, description: row.description, phone: row.phone, city: row.city, country: row.country,
-    skills: row.skills, createdAt: row.created_at, updatedAt: row.updated_at };
+    skills: row.skills, avatarFileId: row.avatar_file_id, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 function requireActive(user) {
   if (!user) throw missing();
