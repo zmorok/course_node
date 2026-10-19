@@ -9,7 +9,7 @@ export const fileDto = row => ({ id: row.id, originalName: row.original_name, mi
 export function requireFileActor(actor) {
   if (!actor) throw new AppError(401, 'UNAUTHENTICATED', 'Войдите в аккаунт');
   if (actor.status === 'BLOCKED' && (!actor.blocked_until || new Date(actor.blocked_until).getTime() > Date.now())) throw new AppError(403, 'ACCOUNT_BLOCKED', 'Аккаунт заблокирован');
-  if (actor.role !== 'CLIENT') throw new AppError(403, 'FORBIDDEN', 'Файлы и портфолио доступны аккаунту клиента');
+  if (actor.role !== 'CLIENT') throw new AppError(403, 'FORBIDDEN', 'Действие доступно аккаунту клиента');
 }
 export function createFileService({ repository, transaction, storage, logger = console }) {
   let cleanup;
