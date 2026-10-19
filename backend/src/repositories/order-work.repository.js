@@ -12,12 +12,21 @@ export function createOrderWorkRepository(database){return {
   async reviewSubmission(id,actorId,status,comment){await database.query('UPDATE workify.order_submissions SET status=$3,reviewed_by=$2,reviewed_at=clock_timestamp(),review_comment=$4 WHERE id=$1',[id,actorId,status,comment]);},
   async requestRevision(id){await database.query("UPDATE workify.orders SET status='REVISION_REQUESTED' WHERE id=$1",[id]);},
   async completeOrder(order){await database.query("UPDATE workify.orders SET status='COMPLETED',completed_at=clock_timestamp() WHERE id=$1",[order.id]);await database.query("UPDATE workify.projects SET status='COMPLETED',completed_at=clock_timestamp() WHERE id=$1",[order.project_id]);},
+  async cancelOrder(order,actorId,reason){
+    await database.query("UPDATE workify.order_submissions SET status='CANCELLED' WHERE order_id=$1 AND status='SUBMITTED'",[order.id]);
+    await database.query("UPDATE workify.orders SET status='CANCELLED',cancelled_by=$2,cancelled_at=clock_timestamp(),cancellation_reason=$3 WHERE id=$1",[order.id,actorId,reason]);
+    await database.query("UPDATE workify.projects SET status='OPEN' WHERE id=$1",[order.project_id]);
+  },
   async createDeadline(order,input){return (await database.query(`INSERT INTO workify.order_deadline_requests(order_id,freelancer_id,previous_deadline_at,proposed_deadline_at,reason)
     SELECT $1,$2,$3,$4,$5 WHERE $4::timestamptz>clock_timestamp() AND $3::timestamptz<>$4::timestamptz RETURNING *`,[order.id,order.freelancer_id,order.deadline_at,input.proposedDeadlineAt,input.reason])).rows[0];},
   async decideDeadline(id,actorId,status,reason){return (await database.query('UPDATE workify.order_deadline_requests SET status=$3,decided_by=$2,decided_at=clock_timestamp(),decision_reason=$4 WHERE id=$1 RETURNING *',[id,actorId,status,reason])).rows[0];},
   async changeDeadline(orderId,requestId){return (await database.query(`UPDATE workify.orders o SET deadline_at=d.proposed_deadline_at FROM workify.order_deadline_requests d
     WHERE o.id=$1 AND d.id=$2 AND d.order_id=o.id AND d.previous_deadline_at=o.deadline_at AND d.proposed_deadline_at>clock_timestamp() RETURNING o.id`,[orderId,requestId])).rowCount===1;},
-  async event(orderId,actorId,type,submissionId,requestId,metadata){await database.query('INSERT INTO workify.order_events(order_id,actor_id,event_type,submission_id,deadline_request_id,metadata) VALUES($1,$2,$3,$4,$5,$6::jsonb)',[orderId,actorId,type,submissionId,requestId,JSON.stringify(metadata)]);},
+  async event(orderId,actorId,type,submissionId,requestId,metadata){await database.query('INSERT INTO workify.order_events(order_id,actor_id,event_type,submission_id,deadline_request_id,metadata,created_at) VALUES($1,$2,$3,$4,$5,$6::jsonb,clock_timestamp())',[orderId,actorId,type,submissionId,requestId,JSON.stringify(metadata)]);},
+  async listEvents(orderId,query){return (await database.query(`WITH matches AS (SELECT * FROM workify.order_events WHERE order_id=$1),page AS (
+    SELECT e.id,e.event_type,e.actor_id,e.submission_id,e.deadline_request_id,e.metadata,e.created_at,p.first_name,p.last_name
+    FROM matches e LEFT JOIN workify.profiles p ON p.user_id=e.actor_id ORDER BY e.created_at DESC,e.id DESC LIMIT $2 OFFSET $3)
+    SELECT (SELECT count(*) FROM matches)::int AS total,COALESCE((SELECT jsonb_agg(page ORDER BY created_at DESC,id DESC) FROM page),'[]'::jsonb) AS items`,[orderId,query.pageSize,(query.page-1)*query.pageSize])).rows[0];},
   async notify(recipientId,type,order,message,metadata){await database.query('INSERT INTO workify.notifications(recipient_id,event_type,project_id,order_id,message,metadata) VALUES($1,$2,$3,$4,$5,$6::jsonb)',[recipientId,type,order.project_id,order.id,message,JSON.stringify(metadata)]);},
   async listSubmissions(orderId,query){return (await database.query(`WITH matches AS (SELECT * FROM workify.order_submissions WHERE order_id=$1),page AS (
     SELECT s.id,s.version,s.comment,s.links,s.status,s.reviewed_by AS "reviewedBy",s.reviewed_at AS "reviewedAt",s.review_comment AS "reviewComment",s.created_at AS "createdAt",
