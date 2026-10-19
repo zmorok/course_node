@@ -49,3 +49,22 @@ test('a repeated 401 after refresh ends the local session without a retry loop',
   await assert.rejects(app.api('/me/profile'), { code: 'UNAUTHENTICATED' });
   assert.equal(app.calls.length, 3); assert.deepEqual(app.events, ['UNAUTHENTICATED']);
 });
+
+test('multipart uploads retain FormData and let the browser create the boundary, including a token refresh retry',async context=>{
+  const app=await client(context,[problem(401,'UNAUTHENTICATED'),refresh,{status:201,body:{file:{id:'file-id'}}}]);
+  const form=new FormData();form.append('file',new Blob(['text'],{type:'text/plain'}),'notes.txt');
+  assert.equal((await app.api('/files',{method:'POST',body:form})).file.id,'file-id');
+  for(const call of [app.calls[0],app.calls[2]]){
+    assert.equal(call.options.body,form);assert(!Object.hasOwn(call.options.headers,'Content-Type'));
+    assert.equal(call.options.headers['X-Workify-Client'],'browser');
+  }
+  assert.equal(app.events.length,0);
+});
+
+test('binary downloads retain authorization and JSON errors still use the safe envelope',async context=>{
+  const app=await client(context,[refresh,{status:200,body:'binary-content'},problem(404,'FILE_NOT_FOUND')]);
+  await app.restoreSession();
+  const blob=await app.api('/files/id',{responseType:'blob'});
+  assert(blob instanceof Blob);assert.equal(app.calls[1].options.headers.Authorization,'Bearer fresh-access-token');
+  await assert.rejects(app.api('/files/missing',{responseType:'blob'}),{code:'FILE_NOT_FOUND'});
+});

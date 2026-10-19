@@ -19,6 +19,7 @@ Host, user, port и пароль задаются стандартной кон�
 | [001](../database/migrations/001_initial_schema.sql) | Таблицы, PK/FK/CHECK/UNIQUE, обязательные частичные уникальные индексы, служебные триггеры времени и неизменяемых журналов |
 | [002](../database/migrations/002_indexes_and_views.sql) | Индексы выборок и пять представлений; в этой же транзакции применяется [справочный seed](../database/seeds/reference_data.sql) |
 | [003](../database/migrations/003_auth_sessions.sql) | Отзывные auth_sessions и хеши одноразовых refresh token; consumed_at сохраняется для обнаружения replay |
+| [004](../database/migrations/004_file_lifecycle.sql) | SHA-256 и durable deleted_at в stored_files для повторяемого удаления из volume; старые метаданные сохраняются |
 
 Применённые миграции не редактируются. Для последующих изменений добавляется следующая версия и её включение в migrate.sql. Миграции не выполняют DROP/TRUNCATE рабочих данных; откат изменения схемы оформляется отдельной осмысленной миграцией. Начальное создание схемы и журнала также транзакционно.
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
+import { AvatarEditor,PortfolioPanel } from './PortfolioPanel.jsx';
 
 const fieldDefinitions = [
   ['firstName', 'Имя', 100, 'text', 'given-name'], ['lastName', 'Фамилия', 100, 'text', 'family-name'],
@@ -13,7 +14,7 @@ const sameIds = (left, right) => left.length === right.length && left.every(id =
 
 function ProfileIdentity({ profile, children }) {
   return <>
-    <div className="profile-avatar" aria-hidden="true">{profile.firstName.slice(0, 1)}{profile.lastName.slice(0, 1)}</div>
+    <div className="profile-avatar" aria-hidden="true">{profile.avatarFileId?<img src={`/api/files/${profile.avatarFileId}`} alt=""/>:<>{profile.firstName.slice(0, 1)}{profile.lastName.slice(0, 1)}</>}</div>
     <h2>{profile.firstName} {profile.lastName}</h2>
     <p className="profile-handle">@{profile.username}</p>
     {profile.headline && <p className="profile-headline">{profile.headline}</p>}
@@ -129,9 +130,11 @@ export function ProfilePage({ user, onUserChange }) {
               <button type="button" className="secondary" disabled={!skillsDirty} onClick={() => { setSelected(savedIds); setSkillsError(null); setSkillsMessage(''); }}>Отменить выбор</button></div>
           </fieldset></form><p className="save-message" role="status">{skillsMessage}</p>
         </section>}
+        {isClient&&<PortfolioPanel userId={user.id} editable/>}
       </div>
       <aside className="profile-card profile-summary" aria-label="Сохранённые данные профиля">
         <ProfileIdentity profile={profile}><span className="role-badge">{isClient ? 'Клиент' : 'Администратор'}</span></ProfileIdentity>
+        {isClient&&<AvatarEditor fileId={profile.avatarFileId} onChange={avatarFileId=>setProfile(previous=>({...previous,avatarFileId}))}/>}
         {isClient && <><div className="profile-tags">{profile.skills.map(skill => <span key={skill.id}>{skill.name}</span>)}</div>
           <a className="profile-public-link text-link" href={`/users/${user.id}`} target="_blank" rel="noopener noreferrer">Открыть публичный профиль ↗</a>
           <p className="profile-help">Так ваши сохранённые данные увидят другие пользователи.</p></>}
@@ -155,6 +158,6 @@ export function PublicProfilePage({ userId }) {
       <div className="profile-ratings"><div><strong>{profile.customerRating ?? '—'}</strong><span>Как заказчик</span><small>Отзывов: {profile.customerReviewCount}</small></div>
         <div><strong>{profile.freelancerRating ?? '—'}</strong><span>Как исполнитель</span><small>Отзывов: {profile.freelancerReviewCount}</small></div></div></section>
       <div className="profile-editor"><section className="profile-card"><h2>О себе</h2><p className="public-description">{profile.description || 'Пользователь пока не добавил описание.'}</p></section>
-        <section className="profile-card"><h2>Навыки</h2>{profile.skills.length ? <div className="profile-tags">{profile.skills.map(skill => <span key={skill.id}>{skill.name}</span>)}</div> : <p className="profile-help">Навыки пока не указаны.</p>}</section></div></div>
+        <section className="profile-card"><h2>Навыки</h2>{profile.skills.length ? <div className="profile-tags">{profile.skills.map(skill => <span key={skill.id}>{skill.name}</span>)}</div> : <p className="profile-help">Навыки пока не указаны.</p>}</section><PortfolioPanel userId={userId}/></div></div>
   </>;
 }
