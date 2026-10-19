@@ -9,7 +9,7 @@ const date=value=>new Date(value).toLocaleString('ru-RU',{day:'numeric',month:'l
 function ErrorMessage({error}){return error?<div className="form-error" role="alert">{error.message}{error.details?.map(issue=><small key={issue.field}>{issue.message}</small>)}</div>:null;}
 
 export function Agreement({order}){
-  return <section className="proposal-agreement" aria-label="Согласованные условия заказа"><p className="eyebrow">Заказ создан</p><h3>{order.title}</h3>
+  return <section className="proposal-agreement" aria-label="Согласованные условия заказа"><p className="eyebrow">{{IN_PROGRESS:'Заказ в работе',SUBMITTED:'Результат на проверке',REVISION_REQUESTED:'Ожидается доработка',COMPLETED:'Заказ завершён',CANCELLED:'Заказ отменён'}[order.status]}</p><h3>{order.title}</h3>
     <p className="profile-help">Условия и вложения зафиксированы при создании заказа.</p><dl className="proposal-terms"><div><dt>Согласованная цена</dt><dd>{price(order.agreedPrice)}</dd></div><div><dt>Согласованный срок</dt><dd>{date(order.initialDeadlineAt)}</dd></div></dl>
     <details><summary>Описание и файлы задания</summary><p className="public-description">{order.description}</p>{order.files.length?<div className="attachment-list">{order.files.map(file=><FileLink key={file.id} file={file} privateFile/>)}</div>:<p className="profile-help">Вложений нет.</p>}</details>
     <a className="text-link order-agreement-link" href={`/orders/${order.id}`}>Открыть заказ ↗</a>
