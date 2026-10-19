@@ -18,6 +18,10 @@ import { createPortfolioRepository } from './repositories/portfolio.repository.j
 import { createPortfolioService } from './services/portfolio.service.js';
 import { createProjectRepository } from './repositories/project.repository.js';
 import { createProjectService } from './services/project.service.js';
+import { createProposalRepository } from './repositories/proposal.repository.js';
+import { createAssignmentRepository } from './repositories/assignment.repository.js';
+import { createProposalService } from './services/proposal.service.js';
+import { createAssignmentService } from './services/assignment.service.js';
 
 let pool;
 try {
@@ -39,7 +43,9 @@ try {
     transaction: operation => withTransaction(pool, client => operation(createPortfolioRepository(client), createFileRepository(client))) });
   const projectService = createProjectService({repository:createProjectRepository(pool),fileService,
     transaction:operation=>withTransaction(pool,client=>operation(createProjectRepository(client),createFileRepository(client)))});
-  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService });
+  const proposalService=createProposalService({repository:createProposalRepository(pool),assignmentService:createAssignmentService(),
+    transaction:operation=>withTransaction(pool,client=>operation(createProposalRepository(client),createAssignmentRepository(client)))});
+  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));

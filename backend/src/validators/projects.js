@@ -22,7 +22,7 @@ function safeText(max, min = 1, multiline = false) {
   };
 }
 const nullable = rule => (input, field, issues) => input === null ? null : rule(input, field, issues);
-function deadline(input, field, issues) {
+export function deadline(input, field, issues) {
   if (typeof input !== 'string' || !/^\d{4}-\d{2}-\d{2}T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(input) || !Number.isFinite(Date.parse(input))
       || new Date(`${input.slice(0,10)}T00:00:00Z`).toISOString().slice(0,10)!==input.slice(0,10)) {
     issues.push({ field, message: 'Нужна дата ISO 8601 с часовым поясом' }); return;

@@ -5,6 +5,7 @@ import { AuthPanel, AccountPanel } from './AuthPanel.jsx';
 import { authenticate, restoreSession, logout, api } from './api.js';
 import { ProfilePage, PublicProfilePage } from './ProfilePage.jsx';
 import { ProjectListPage,ProjectDetailsPage,ProjectEditorPage } from './ProjectPages.jsx';
+import { OwnProposalsPage } from './ProposalPages.jsx';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -52,21 +53,23 @@ function App() {
   const ownProfile = /^\/me\/profile\/?$/.test(window.location.pathname);
   const catalog = /^\/projects\/?$/.test(window.location.pathname);
   const ownProjects = /^\/me\/projects\/?$/.test(window.location.pathname);
+  const ownProposals = /^\/me\/proposals\/?$/.test(window.location.pathname);
   const newProject = /^\/projects\/new\/?$/.test(window.location.pathname);
   const projectMatch = !newProject && /^\/projects\/([^/]+)(\/edit)?\/?$/.exec(window.location.pathname);
-  const projectView = Boolean(catalog || projectMatch && (!projectMatch[2] || user) || (newProject || ownProjects) && user);
+  const projectView = Boolean(catalog || projectMatch && (!projectMatch[2] || user) || (newProject || ownProjects || ownProposals) && user);
   const profileView = Boolean(publicMatch || (ownProfile && user) || projectView);
   return (
     <div className={profileView ? 'page profile-page' : 'page'}>
       <header className="header">
         <a className="brand" href="/" aria-label="Workify — главная"><span className="brand-mark">w.</span>workify</a>
-        {user ? <nav className="profile-nav" aria-label="Навигация"><a href="/projects" aria-current={catalog?'page':undefined}>Каталог</a>{user.role==='CLIENT'&&<a href="/me/projects" aria-current={ownProjects?'page':undefined}>Мои проекты</a>}<a href="/me/profile" aria-current={ownProfile ? 'page' : undefined}>Мой профиль</a><a href="/">Аккаунт</a></nav>
+        {user ? <nav className="profile-nav" aria-label="Навигация"><a href="/projects" aria-current={catalog?'page':undefined}>Каталог</a>{user.role==='CLIENT'&&<><a href="/me/projects" aria-current={ownProjects?'page':undefined}>Мои проекты</a><a href="/me/proposals" aria-current={ownProposals?'page':undefined}>Мои отклики</a></>}<a href="/me/profile" aria-current={ownProfile ? 'page' : undefined}>Мой профиль</a><a href="/">Аккаунт</a></nav>
           : <nav className="profile-nav" aria-label="Навигация"><a href="/projects">Каталог проектов</a><a href="/">Войти</a></nav>}
       </header>
       <main className={profileView ? 'profile-main' : undefined}>
         {projectView && restoring ? <div className="profile-card" role="status">Загружаем рабочее пространство…</div>
           : catalog ? <ProjectListPage user={user}/>
           : ownProjects && user ? <ProjectListPage user={user} mine/>
+          : ownProposals && user ? <OwnProposalsPage key={user.id} user={user}/>
           : newProject && user ? <ProjectEditorPage user={user}/>
           : projectMatch && (!projectMatch[2] || user) ? projectMatch[2] ? <ProjectEditorPage projectId={projectMatch[1]} user={user}/> : <ProjectDetailsPage projectId={projectMatch[1]} user={user}/>
           : publicMatch ? <PublicProfilePage userId={publicMatch[1]} /> : ownProfile && user ? <ProfilePage user={user} onUserChange={setUser} /> : <>

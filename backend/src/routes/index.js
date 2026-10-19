@@ -5,8 +5,9 @@ import { createProfileRouter } from './profile.routes.js';
 import { createFileRouter } from './file.routes.js';
 import { createPortfolioRouter } from './portfolio.routes.js';
 import { createProjectRouter } from './project.routes.js';
+import { createProposalRouter } from './proposal.routes.js';
 
-export function createApiRouter({ healthService, authService, authConfig, profileService, fileService, portfolioService, projectService }) {
+export function createApiRouter({ healthService, authService, authConfig, profileService, fileService, portfolioService, projectService, proposalService }) {
   const router = Router();
   router.use(createHealthRouter(healthService));
   if (authService) router.use(createAuthRouter(authService, authConfig));
@@ -14,5 +15,6 @@ export function createApiRouter({ healthService, authService, authConfig, profil
   if (fileService) router.use(createFileRouter(fileService, authService));
   if (portfolioService) router.use(createPortfolioRouter(portfolioService, authService));
   if (projectService) router.use(createProjectRouter(projectService, authService));
+  if (proposalService) router.use(createProposalRouter(proposalService, authService));
   return router;
 }
