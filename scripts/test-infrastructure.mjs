@@ -86,6 +86,9 @@ try {
       '-e', 'WORKIFY_DB_TESTS=1', 'backend', 'npm', 'run', script);
     console.log(result.stdout.trim());
   }
+  const clientTests = await compose('run', '--rm', '--no-deps', '--volume', './frontend/test:/app/test:ro',
+    '--volume', './frontend/src/api.js:/app/src/api.js:ro', 'frontend', 'npm', 'test');
+  console.log(clientTests.stdout.trim());
 
   const authHeaders = { 'Content-Type': 'application/json', 'X-Workify-Client': 'browser' };
   const authSuffix = randomUUID().replaceAll('-', '');
@@ -100,6 +103,20 @@ try {
   assert.equal((await request(`${frontend}/api/auth/me`, { headers: authorization })).status, 200);
   assert.equal((await request(`${frontend}/api/auth/me`)).status, 401);
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 403);
+  const skillCatalog = await (await request(`${frontend}/api/skills`)).json();
+  const profileSkillId = skillCatalog.skills[0].id;
+  const profileChange = await request(`${frontend}/api/me/profile`, { method: 'PATCH', headers: { ...authHeaders, ...authorization },
+    body: JSON.stringify({ firstName: 'Smoke updated', headline: 'Сохранённый профиль', phone: '+375291234567' }) });
+  assert.equal(profileChange.status, 200);
+  const skillChange = await request(`${frontend}/api/me/skills`, { method: 'PUT', headers: { ...authHeaders, ...authorization },
+    body: JSON.stringify({ skillIds: [profileSkillId] }) });
+  assert.equal(skillChange.status, 200);
+  const publicProfileResponse = await request(`${frontend}/api/users/${account.user.id}`);
+  assert.equal(publicProfileResponse.status, 200);
+  const publicProfile = (await publicProfileResponse.json()).profile;
+  assert.equal(publicProfile.skills[0].id, profileSkillId);
+  assert(!Object.hasOwn(publicProfile, 'email')); assert(!Object.hasOwn(publicProfile, 'phone'));
+  console.log('PASS: profile editing, persisted skills and private contact isolation through the frontend proxy');
   await compose('exec', '-T', 'backend', 'node', 'src/commands/promote-admin.js', account.user.email);
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 200);
   console.log('PASS: registration, HttpOnly cookie, current user and CLIENT restriction through the frontend proxy');
@@ -142,6 +159,9 @@ try {
   const renewed = await restored.json();
   const renewedCookie = restored.headers.get('set-cookie').split(';')[0];
   assert.equal(renewed.user.id, account.user.id);
+  const persistedProfile = await (await request(`${frontend}/api/me/profile`, { headers: authorization })).json();
+  assert.equal(persistedProfile.profile.headline, 'Сохранённый профиль');
+  assert.equal(persistedProfile.profile.skills[0].id, profileSkillId);
   assert.equal((await request(`${frontend}/api/auth/me`, { headers: authorization })).status, 200);
   const out = await request(`${frontend}/api/auth/logout`, { method: 'POST', headers: { ...authHeaders, Cookie: renewedCookie } });
   assert.equal(out.status, 204);

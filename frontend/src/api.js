@@ -55,10 +55,15 @@ export async function api(path, options) {
   try { return await send(path, options); }
   catch (error) {
     if (error.status === 401) {
-      try { await restoreSession(); return await send(path, options); }
+      try { await restoreSession(); }
       catch (refreshError) {
         if ([401, 403].includes(refreshError.status)) forgetSession(refreshError.message);
         throw refreshError;
+      }
+      try { return await send(path, options); }
+      catch (retryError) {
+        if (retryError.status === 401 || retryError.code === 'ACCOUNT_BLOCKED') forgetSession(retryError.message);
+        throw retryError;
       }
     }
     if (error.code === 'ACCOUNT_BLOCKED') forgetSession(error.message);

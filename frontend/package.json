@@ -5,6 +5,7 @@
   "type": "module",
   "engines": { "node": ">=24 <25" },
   "scripts": {
+    "test": "node --test test/*.test.js",
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "start": "node server.mjs"
