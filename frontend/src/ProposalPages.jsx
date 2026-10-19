@@ -8,9 +8,9 @@ const price=value=>value===null?'Не указана':new Intl.NumberFormat('ru-
 const date=value=>new Date(value).toLocaleString('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
 function ErrorMessage({error}){return error?<div className="form-error" role="alert">{error.message}{error.details?.map(issue=><small key={issue.field}>{issue.message}</small>)}</div>:null;}
 
-function Agreement({order}){
+export function Agreement({order}){
   return <section className="proposal-agreement" aria-label="Согласованные условия заказа"><p className="eyebrow">Заказ создан</p><h3>{order.title}</h3>
-    <p className="profile-help">Условия и вложения зафиксированы при принятии отклика.</p><dl className="proposal-terms"><div><dt>Согласованная цена</dt><dd>{price(order.agreedPrice)}</dd></div><div><dt>Согласованный срок</dt><dd>{date(order.initialDeadlineAt)}</dd></div></dl>
+    <p className="profile-help">Условия и вложения зафиксированы при создании заказа.</p><dl className="proposal-terms"><div><dt>Согласованная цена</dt><dd>{price(order.agreedPrice)}</dd></div><div><dt>Согласованный срок</dt><dd>{date(order.initialDeadlineAt)}</dd></div></dl>
     <details><summary>Описание и файлы задания</summary><p className="public-description">{order.description}</p>{order.files.length?<div className="attachment-list">{order.files.map(file=><FileLink key={file.id} file={file} privateFile/>)}</div>:<p className="profile-help">Вложений нет.</p>}</details>
   </section>;
 }
@@ -38,11 +38,11 @@ function ProposalCard({proposal,onChange}){
   </article>;
 }
 
-function ProposalList({path,onChange,pendingOnly=false}){
+function ProposalList({path,onChange,pendingOnly=false,revision}){
   const [status,setStatus]=useState(pendingOnly?'PENDING':''),[page,setPage]=useState(1),[attempt,setAttempt]=useState(0),[data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(null),[completed,setCompleted]=useState(null);
   useEffect(()=>{let active=true;setLoading(true);setError(null);const params=new URLSearchParams(path.includes('?')?path.split('?')[1]:'');params.set('page',page);if(status)params.set('status',status);
     api(`${path.split('?')[0]}?${params}`).then(result=>{if(active)setData(result);}).catch(problem=>{if(active)setError(problem);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};
-  },[path,status,page,attempt]);
+  },[path,status,page,attempt,revision]);
   function changed(proposal){setCompleted(proposal);setAttempt(value=>value+1);onChange?.(proposal);}
   return <div className="proposal-list">
     {!pendingOnly&&<div className="proposal-toolbar"><div className="field"><label htmlFor="proposal-status">Статус откликов</label><select id="proposal-status" value={status} onChange={event=>{setStatus(event.target.value);setPage(1);}}><option value="">Все статусы</option>{Object.entries(statuses).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div><button className="text-button" disabled={loading} onClick={()=>setAttempt(value=>value+1)}>Обновить список</button></div>}
@@ -62,7 +62,7 @@ export function ProjectProposals({project,user,onProjectChange}){
   const eligible=user?.role==='CLIENT'&&!project.isOwn&&project.status==='OPEN';
   useEffect(()=>{if(!eligible)return;let active=true;setLoading(true);setChecked(false);setError(null);api(`/me/proposals?projectId=${project.id}&status=PENDING&pageSize=1`).then(data=>{if(active){setPending(data.items[0]??null);setChecked(true);}})
     .catch(problem=>{if(active)setError(problem);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[project.id,user?.id,eligible,attempt]);
-  if(project.isOwn&&user?.role==='CLIENT')return <section className="profile-card"><p className="eyebrow">{project.status==='OPEN'?'Выберите исполнителя':'История предложений'}</p><h2>Отклики на проект</h2><p className="profile-help">{project.status==='OPEN'?'Примите подходящее предложение, чтобы зафиксировать условия и начать работу.':'Предложения, принятые решения и зафиксированные условия заказа.'}</p><ProposalList path={`/projects/${project.id}/proposals`} onChange={proposal=>{if(proposal.order)onProjectChange();}}/></section>;
+  if(project.isOwn&&user?.role==='CLIENT')return <section className="profile-card"><p className="eyebrow">{project.status==='OPEN'?'Выберите исполнителя':'История предложений'}</p><h2>Отклики на проект</h2><p className="profile-help">{project.status==='OPEN'?'Примите подходящее предложение, чтобы зафиксировать условия и начать работу.':'Предложения, принятые решения и зафиксированные условия заказа.'}</p><ProposalList path={`/projects/${project.id}/proposals`} revision={project.status} onChange={proposal=>{if(proposal.order)onProjectChange();}}/></section>;
   if(!user&&project.status==='OPEN')return <section className="profile-card"><h2>Готовы взяться за проект?</h2><p className="profile-help">Войдите в аккаунт, чтобы предложить свои условия.</p><a className="text-link" href="/">Войти или зарегистрироваться ↗</a></section>;
   if(!eligible)return null;
   async function send(event){event.preventDefault();if(!Number.isFinite(new Date(draft.offeredDeadlineAt).getTime())){setError({message:'Укажите дату и время выполнения.'});return;}setBusy(true);setError(null);setMessage('');try{
