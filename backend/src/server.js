@@ -16,6 +16,8 @@ import { createFileService } from './services/file.service.js';
 import { createLocalStorage } from './storage/local-storage.js';
 import { createPortfolioRepository } from './repositories/portfolio.repository.js';
 import { createPortfolioService } from './services/portfolio.service.js';
+import { createProjectRepository } from './repositories/project.repository.js';
+import { createProjectService } from './services/project.service.js';
 
 let pool;
 try {
@@ -35,7 +37,9 @@ try {
   const cleanupTimer = setInterval(() => fileService.drainDeletes(), 60_000).unref();
   const portfolioService = createPortfolioService({ repository: createPortfolioRepository(pool), fileService,
     transaction: operation => withTransaction(pool, client => operation(createPortfolioRepository(client), createFileRepository(client))) });
-  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService });
+  const projectService = createProjectService({repository:createProjectRepository(pool),fileService,
+    transaction:operation=>withTransaction(pool,client=>operation(createProjectRepository(client),createFileRepository(client)))});
+  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));
