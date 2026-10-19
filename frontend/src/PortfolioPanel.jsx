@@ -1,13 +1,10 @@
 import React,{ useEffect,useState } from 'react';
 import { api } from './api.js';
+import { uploadFile as upload } from './files.js';
 
 const accept='.png,.jpg,.jpeg,.webp,.pdf,.txt,.docx,.zip,.mp4';
 const sizeLabel=size=>size<1024*1024?`${Math.max(1,Math.ceil(size/1024))} КБ`:`${(size/1024/1024).toFixed(1)} МБ`;
 const empty=()=>({title:'',description:'',links:[],files:[]});
-async function upload(file) {
-  const body=new FormData();body.append('file',file);
-  return (await api('/files',{method:'POST',body})).file;
-}
 function ErrorMessage({error}) {return error?<p className="form-error" role="alert">{error.message}{error.details?.map(issue=><small key={issue.field}>{issue.message}</small>)}</p>:null;}
 export function FileLink({file,privateFile=false}) {
   const [error,setError]=useState(null),[busy,setBusy]=useState(false);
