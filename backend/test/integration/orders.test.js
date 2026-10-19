@@ -83,7 +83,8 @@ test('overdue is computed on the server for active orders only and reads never t
 
 test('order routes cannot create delete or arbitrarily update status parties price source or deadline',async context=>{
   const app=await setup(context),a=await app.register(),b=await app.register(),order=await createOrder(app,a,b);const before=(await app.api(a,`/orders/${order.id}`)).body.order;
-  for(const [path,method,body] of [[`/orders/${order.id}`,'PATCH',{status:'COMPLETED',freelancerId:a.id,deadlineAt:'2030-01-01T00:00:00Z'}],[`/orders/${order.id}`,'DELETE'],['/orders','POST',{projectId:order.project.id,status:'IN_PROGRESS'}],[`/orders/${order.id}/cancel`,'POST',{reason:'Подмена статуса'}]])assert.equal((await app.api(a,path,method,body)).response.status,404);
+  for(const [path,method,body] of [[`/orders/${order.id}`,'PATCH',{status:'COMPLETED',freelancerId:a.id,deadlineAt:'2030-01-01T00:00:00Z'}],[`/orders/${order.id}`,'DELETE'],['/orders','POST',{projectId:order.project.id,status:'IN_PROGRESS'}]])assert.equal((await app.api(a,path,method,body)).response.status,404);
+  assert.equal((await app.api(a,`/orders/${order.id}/cancel`,'POST',{reason:'Подмена статуса',status:'COMPLETED'})).response.status,422);
   assert.equal((await app.api(a,`/orders/${order.id}?mode=freelancer`)).response.status,422);const after=(await app.api(b,`/orders/${order.id}`)).body.order;for(const key of ['status','title','agreedPrice','deadlineAt','updatedAt'])assert.equal(after[key],before[key]);
   assert.equal((await app.api(null,'/missing')).response.status,404);
 });
