@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { AuthPanel, AccountPanel } from './AuthPanel.jsx';
 import { authenticate, restoreSession, logout, api } from './api.js';
+import { ProfilePage, PublicProfilePage } from './ProfilePage.jsx';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -46,13 +47,18 @@ function App() {
   }, [checkConnection]);
 
   const labels = { checking: 'Проверяем подключение…', ready: 'Подключение установлено', unavailable: 'Сервис временно недоступен' };
+  const publicMatch = /^\/users\/([^/]+)\/?$/.exec(window.location.pathname);
+  const ownProfile = /^\/me\/profile\/?$/.test(window.location.pathname);
+  const profileView = Boolean(publicMatch || (ownProfile && user));
   return (
-    <div className="page">
+    <div className={profileView ? 'page profile-page' : 'page'}>
       <header className="header">
         <a className="brand" href="/" aria-label="Workify — главная"><span className="brand-mark">w.</span>workify</a>
-        <span className="header-note">IT-проекты · люди · результат</span>
+        {user ? <nav className="profile-nav" aria-label="Аккаунт"><a href="/me/profile" aria-current={ownProfile ? 'page' : undefined}>Мой профиль</a><a href="/">Аккаунт</a></nav>
+          : <span className="header-note">IT-проекты · люди · результат</span>}
       </header>
-      <main>
+      <main className={profileView ? 'profile-main' : undefined}>
+        {publicMatch ? <PublicProfilePage userId={publicMatch[1]} /> : ownProfile && user ? <ProfilePage user={user} onUserChange={setUser} /> : <>
         <section className="intro" aria-labelledby="welcome-title">
           <p className="eyebrow">Ваше рабочее пространство</p>
           <h1 id="welcome-title">Хорошие проекты<br />начинаются с людей.</h1>
@@ -70,6 +76,7 @@ function App() {
             : <AuthPanel restoring={restoring} notice={notice} onAuthenticate={async (mode, values) => { setUser(await authenticate(mode, values)); setNotice(''); setRestoreFailed(false); }} />}
           {restoreFailed && !restoring && !user && <button className="restore-button secondary" onClick={restore}>Повторить восстановление сессии</button>}
         </aside>
+        </>}
       </main>
       <footer><span>Workify</span><span>Для работы, у которой есть результат.</span></footer>
     </div>

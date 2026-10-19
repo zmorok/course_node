@@ -83,8 +83,9 @@ export function AccountPanel({ user, onLogout, onRefresh, onAdminCheck }) {
     <p className="eyebrow">Вы в Workify</p>
     <h2 id="account-title">{user.firstName} {user.lastName}</h2>
     <p className="account-username">@{user.username}</p><p className="account-email">{user.email}</p>
-    <div className="account-info">{user.role === 'ADMIN' ? 'Доступ администратора подтверждается сервером. Разделы управления появятся на следующих этапах.' : 'Вы можете быть заказчиком и исполнителем. Профиль, проекты и заказы появятся на следующих этапах.'}</div>
+    <div className="account-info">{user.role === 'ADMIN' ? 'Доступ администратора подтверждается сервером. Разделы управления появятся на следующих этапах.' : 'Вы можете быть заказчиком и исполнителем. Заполните профиль и укажите свои навыки.'}</div>
     <div className="account-actions">
+      <a className="button-link" href="/me/profile">Мой профиль<span aria-hidden="true">↗</span></a>
       <button type="button" disabled={busy} onClick={() => run(onRefresh)}>Обновить данные<span aria-hidden="true">↻</span></button>
       {user.role === 'ADMIN' && <button type="button" disabled={busy} onClick={() => run(onAdminCheck)}>Проверить доступ администратора</button>}
       <button type="button" className="secondary" disabled={busy} onClick={() => run(onLogout)}>Выйти из аккаунта</button>
