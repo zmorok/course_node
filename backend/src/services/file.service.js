@@ -46,7 +46,7 @@ export function createFileService({ repository, transaction, storage, logger = c
         requireFileActor(await repo.lockActor(actor.id));
         const [row] = await repo.lockFiles([id]);
         if (!row || row.uploaded_by !== actor.id) throw fileMissing();
-        if (await repo.used(id)) throw new AppError(409, 'FILE_IN_USE', 'Сначала удалите вложение из портфолио или аватар');
+        if (await repo.used(id)) throw new AppError(409, 'FILE_IN_USE', 'Файл связан с сохранёнными данными. Удалить его нельзя');
         await repo.markUnusedDeleted([id]);
       });
       await service.drainDeletes();
