@@ -45,4 +45,12 @@ SELECT NOT EXISTS (SELECT FROM workify.schema_migrations WHERE version = 3) AS a
     COMMIT;
 \endif
 
+SELECT NOT EXISTS (SELECT FROM workify.schema_migrations WHERE version = 4) AS apply_004 \gset
+\if :apply_004
+    BEGIN;
+    \ir migrations/004_file_lifecycle.sql
+    INSERT INTO workify.schema_migrations (version, name) VALUES (4, 'file_lifecycle');
+    COMMIT;
+\endif
+
 SELECT pg_advisory_unlock(173204, 2);
