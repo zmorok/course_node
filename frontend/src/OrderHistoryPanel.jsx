@@ -1,0 +1,29 @@
+import React,{useEffect,useState} from 'react';
+import {api} from './api.js';
+const titles={ORDER_CREATED:'Заказ создан',SUBMISSION_CREATED:'Результат передан на проверку',REVISION_REQUESTED:'Запрошена доработка',ORDER_COMPLETED:'Работа принята, заказ завершён',ORDER_CANCELLED:'Заказ отменён, проект снова открыт',DEADLINE_REQUESTED:'Предложен новый срок',DEADLINE_APPROVED:'Новый срок согласован',DEADLINE_REJECTED:'Изменение срока отклонено',DEADLINE_EXPIRED:'Запрос срока закрыт'};
+const reasons={ORDER_SUBMITTED:'Работа передана на проверку',ORDER_COMPLETED:'Заказ завершён',ORDER_CANCELLED:'Заказ отменён',TIME_EXPIRED:'Предложенная дата прошла',DEADLINE_CHANGED:'Исходный срок изменился'};
+const date=value=>new Date(value).toLocaleString('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
+function ErrorMessage({error}){return error?<div className="form-error" role="alert">{error.message}{error.details?.map(issue=><small key={issue.field}>{issue.message}</small>)}</div>:null;}
+export function OrderHistoryPanel({order,onChange}){
+  const path=`/orders/${order.id}`;
+  const [data,setData]=useState(null),[page,setPage]=useState(1),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState(null),[attempt,setAttempt]=useState(0);
+  const [reason,setReason]=useState(''),[confirm,setConfirm]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(null),[message,setMessage]=useState(''),[needsRefresh,setNeedsRefresh]=useState(false);
+  useEffect(()=>{let active=true;setLoading(true);setData(null);setLoadError(null);api(`${path}/events?page=${page}`).then(value=>{if(active)setData(value);}).catch(problem=>{if(active)setLoadError(problem);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[path,order,page,attempt]);
+  async function refresh(){setBusy(true);setError(null);try{await onChange();setAttempt(value=>value+1);setNeedsRefresh(false);}catch(problem){setError(problem);}finally{setBusy(false);}}
+  async function cancel(event){event.preventDefault();setBusy(true);setError(null);let saved=false;try{await api(`${path}/cancel`,{method:'POST',body:{reason}});saved=true;setConfirm(false);setReason('');await onChange();setPage(1);setMessage('Заказ отменён. Соглашение и результаты сохранены в истории.');}catch(problem){setError(saved?{message:'Отмена сохранена, но карточку не удалось обновить. Обновите данные.'}:problem);if(saved)setNeedsRefresh(true);}finally{setBusy(false);}}
+  return <>
+    {(order.permissions.cancel||message||error)&&<section className="profile-card"><h2>{order.participantMode==='customer'?'Отмена заказа':'Отказ от заказа'}</h2><p className="profile-help">При отмене заказ сохранится в истории, а проект снова станет доступен для выбора исполнителя.</p><ErrorMessage error={error}/><p className="save-message" role="status">{message}</p>
+      {order.permissions.cancel&&(!confirm?<button className="secondary danger" disabled={busy||needsRefresh} onClick={()=>setConfirm(true)}>{order.participantMode==='customer'?'Отменить заказ':'Отказаться от заказа'}</button>:<form className="order-work-form" onSubmit={cancel}><fieldset disabled={busy||needsRefresh}><legend>Подтверждение отмены</legend><p className="profile-help">Текущий заказ закроется. Для новой договорённости потребуется новый отклик или приглашение.</p><div className="field"><label htmlFor="order-cancel-reason">Причина отмены заказа</label><textarea id="order-cancel-reason" required maxLength={1000} rows={3} value={reason} onChange={event=>setReason(event.target.value)}/></div><div className="proposal-actions"><button type="submit">{busy?'Отменяем…':'Подтвердить отмену заказа'}</button><button type="button" className="secondary" onClick={()=>{setConfirm(false);setError(null);}}>Продолжить работу</button></div></fieldset></form>)}
+      {error&&<button className="text-button" disabled={busy} onClick={refresh}>Обновить состояние заказа</button>}
+    </section>}
+    <section className="profile-card" aria-labelledby="order-events-heading"><div className="portfolio-heading"><div><p className="eyebrow">Как проходила работа</p><h2 id="order-events-heading">События заказа</h2></div><button className="text-button" disabled={loading||busy} onClick={()=>setAttempt(value=>value+1)}>Обновить события</button></div><p className="profile-help">Сначала новые события. Решения и согласованные сроки сохраняются в истории.</p>
+      {loading?<p role="status">Загружаем события…</p>:loadError?<><ErrorMessage error={loadError}/><button className="secondary" onClick={()=>setAttempt(value=>value+1)}>Повторить загрузку событий</button></>:<>
+        {!data.items.length&&<p className="profile-help">На этой странице событий нет.</p>}
+        <ol className="order-timeline">{data.items.map(item=><li key={item.id}><time dateTime={item.createdAt}>{date(item.createdAt)}</time><h3>{titles[item.type]??'Состояние заказа изменилось'}</h3><p>{item.actor?`${item.actor.participantMode==='customer'?'Заказчик':'Исполнитель'} · ${item.actor.firstName} ${item.actor.lastName}`:'Система'}</p>
+          {item.metadata.version&&<p>Версия результата: {item.metadata.version}</p>}{item.metadata.proposedDeadlineAt&&<p>Срок: {date(item.metadata.previousDeadlineAt)} → {date(item.metadata.proposedDeadlineAt)}</p>}{item.metadata.reason&&<p className="public-description">{item.type==='DEADLINE_EXPIRED'?reasons[item.metadata.reason]??'Запрос закрыт':item.metadata.reason}</p>}
+        </li>)}</ol>
+        {data.total>data.pageSize&&<nav className="project-pagination" aria-label="Страницы событий заказа">{page>1&&<button className="text-button" onClick={()=>setPage(page-1)}>← Назад</button>}<span>Страница {page} из {Math.ceil(data.total/data.pageSize)}</span>{page*data.pageSize<data.total&&<button className="text-button" onClick={()=>setPage(page+1)}>Далее →</button>}</nav>}
+      </>}
+    </section>
+  </>;
+}

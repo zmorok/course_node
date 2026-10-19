@@ -9,8 +9,8 @@ async function record(repo,order,actorId,type,{submission=null,request=null,reas
   const metadata={...(submission?{submissionId:submission.id,version:submission.version}:{}),...(request?{requestId:request.id,previousDeadlineAt:request.previous_deadline_at,proposedDeadlineAt:request.proposed_deadline_at}:{}),...(reason?{reason}:{})};
   await repo.event(order.id,actorId,type,submission?.id??null,request?.id??null,metadata);
   await repo.audit(actorId,type,'order',order.id,{projectId:order.project_id,...metadata});
-  const messages={SUBMISSION_CREATED:'Исполнитель сдал новую версию результата',REVISION_REQUESTED:'Заказчик запросил доработку результата',ORDER_COMPLETED:'Заказчик принял результат. Заказ завершён',DEADLINE_REQUESTED:'Исполнитель предложил изменить срок',DEADLINE_APPROVED:'Заказчик одобрил новый срок',DEADLINE_REJECTED:'Заказчик отклонил изменение срока',DEADLINE_EXPIRED:'Запрос изменения срока закрыт'};
-  const target=['SUBMISSION_CREATED','DEADLINE_REQUESTED'].includes(type)?order.customer_id:order.freelancer_id;
+  const messages={SUBMISSION_CREATED:'Исполнитель сдал новую версию результата',REVISION_REQUESTED:'Заказчик запросил доработку результата',ORDER_COMPLETED:'Заказчик принял результат. Заказ завершён',ORDER_CANCELLED:'Заказ отменён с указанием причины. Проект снова открыт',DEADLINE_REQUESTED:'Исполнитель предложил изменить срок',DEADLINE_APPROVED:'Заказчик одобрил новый срок',DEADLINE_REJECTED:'Заказчик отклонил изменение срока',DEADLINE_EXPIRED:'Запрос изменения срока закрыт'};
+  const target=type==='ORDER_CANCELLED'?(actorId===order.customer_id?order.freelancer_id:order.customer_id):['SUBMISSION_CREATED','DEADLINE_REQUESTED'].includes(type)?order.customer_id:order.freelancer_id;
   await repo.notify(target,type.startsWith('DEADLINE_')&&type!=='DEADLINE_REQUESTED'?'DEADLINE_DECIDED':type,order,messages[type],{status:type,...metadata});
 }
 export function createOrderWorkService({repository,orders,transaction,fileService}){
@@ -41,6 +41,13 @@ export function createOrderWorkService({repository,orders,transaction,fileServic
   return {
     async submissions(actor,id,query){await read(actor,id);return {...await repository.listSubmissions(id,query),page:query.page,pageSize:query.pageSize};},
     async deadlines(actor,id,query){await read(actor,id);return {...await repository.listDeadlines(id,query),page:query.page,pageSize:query.pageSize};},
+    async events(actor,id,query){const order=await read(actor,id),result=await repository.listEvents(id,query);return {...result,page:query.page,pageSize:query.pageSize,items:result.items.map(row=>({id:row.id,type:row.event_type,createdAt:row.created_at,submissionId:row.submission_id,requestId:row.deadline_request_id,
+      actor:row.actor_id?{id:row.actor_id,firstName:row.first_name,lastName:row.last_name,participantMode:orderMode({id:row.actor_id},order)}:null,
+      metadata:Object.fromEntries(['version','reason','previousDeadlineAt','proposedDeadlineAt'].filter(key=>Object.hasOwn(row.metadata,key)).map(key=>[key,row.metadata[key]]))}))};},
+    async cancel(actor,id,input){return run(actor,id,async(repo,reads,files,current,order,project)=>{
+      requireOrderAction(current,order,'cancel');activeProject(project);await closePending(repo,order,'ORDER_CANCELLED');await repo.cancelOrder(order,current.id,input.reason);
+      await record(repo,order,current.id,'ORDER_CANCELLED',{reason:input.reason});return {orderId:id};
+    });},
     async submit(actor,id,input){return run(actor,id,async(repo,reads,files,current,order,project)=>{
       requireOrderAction(current,order,'submit');activeProject(project);await fileService.attachable(files,current.id,input.fileIds,[]);
       const submission=await repo.createSubmission(order,input);await repo.attachFiles(submission.id,input.fileIds);

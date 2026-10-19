@@ -1,6 +1,8 @@
 export function createOrderWorkController(service){const command=method=>async(req,res)=>res.set('Cache-Control','no-store').json(await method(req));return {
   submissions:command(req=>service.submissions(req.user,req.validated.params.orderId,req.validated.query)),
   deadlines:command(req=>service.deadlines(req.user,req.validated.params.orderId,req.validated.query)),
+  events:command(req=>service.events(req.user,req.validated.params.orderId,req.validated.query)),
+  cancel:command(req=>service.cancel(req.user,req.validated.params.orderId,req.validated.body)),
   submit:async(req,res)=>res.status(201).set('Cache-Control','no-store').json(await service.submit(req.user,req.validated.params.orderId,req.validated.body)),
   revision:command(req=>service.revision(req.user,req.validated.params.orderId,req.validated.params.submissionId,req.validated.body)),
   accept:command(req=>service.accept(req.user,req.validated.params.orderId,req.validated.params.submissionId,req.validated.body)),

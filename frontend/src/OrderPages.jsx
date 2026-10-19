@@ -2,6 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {api} from './api.js';
 import {FileLink} from './PortfolioPanel.jsx';
 import {OrderWorkPanel} from './OrderWorkPanel.jsx';
+import {OrderHistoryPanel} from './OrderHistoryPanel.jsx';
 const statuses={IN_PROGRESS:'В работе',SUBMITTED:'На проверке',REVISION_REQUESTED:'На доработке',COMPLETED:'Завершён',CANCELLED:'Отменён'};
 const histories=['COMPLETED','CANCELLED'];
 const active=['IN_PROGRESS','SUBMITTED','REVISION_REQUESTED'];
@@ -54,6 +55,7 @@ export function OrderDetailsPage({orderId,user}){
       </section>
       {order.cancellationReason&&<section className="profile-card"><h2>Причина отмены</h2><p className="public-description">{order.cancellationReason}</p><p className="profile-help">{order.cancelledBy===order.customer.id?'Отменил заказчик':'Отказался исполнитель'} · {date(order.cancelledAt)}</p></section>}
       <OrderWorkPanel key={order.id} order={order} onChange={refreshWork}/>
+      <OrderHistoryPanel key={`history-${order.id}`} order={order} onChange={refreshWork}/>
     </div><aside className="profile-card project-summary"><p className="eyebrow">Условия и участники</p><p className="project-budget">{price(order.agreedPrice)}</p><dl><dt>Текущий срок</dt><dd>{date(order.deadlineAt)}</dd><dt>Первоначальный срок</dt><dd>{date(order.initialDeadlineAt)}</dd><dt>Заказчик</dt><dd><a className="text-link" href={`/users/${order.customer.id}`}>{order.customer.firstName} {order.customer.lastName}</a></dd><dt>Исполнитель</dt><dd><a className="text-link" href={`/users/${order.freelancer.id}`}>{order.freelancer.firstName} {order.freelancer.lastName}</a></dd><dt>Создан</dt><dd>{date(order.createdAt)}</dd>{order.completedAt&&<><dt>Завершён</dt><dd>{date(order.completedAt)}</dd></>}</dl>
       <div className="project-owner-actions"><button className="secondary" onClick={()=>setAttempt(value=>value+1)}>Обновить заказ ↻</button>{(order.participantMode==='customer'||order.project.status==='OPEN')&&<a className="text-link" href={`/projects/${order.project.id}`}>Карточка проекта ↗</a>}</div>
     </aside></div></>;

@@ -16,6 +16,7 @@ const acceptance=object({comment:optional(nullable(content(5000)),null)});
 export const submissionAccept=input=>acceptance(input===undefined?{}:input);
 export const deadlineCreate=object({proposedDeadlineAt:deadline,reason:content(1000)});
 export const deadlineReject=object({reason:content(1000)});
+export const orderCancel=object({reason:content(1000)});
 const approval=object({reason:optional(nullable(content(1000)),null)});
 export const deadlineApprove=input=>approval(input===undefined?{}:input);
 export const submissionParams=object({orderId:uuid(),submissionId:uuid()},{field:'params'});

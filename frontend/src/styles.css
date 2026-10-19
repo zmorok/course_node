@@ -303,6 +303,11 @@ select:focus { outline:2px solid #507d64;outline-offset:2px; }
 .order-work-item { border-top:1px solid #e1e7dc;padding-top:24px;margin-top:24px;min-width:0; }
 .order-work-item h3 { font-size:16px;line-height:1.7;margin:0;overflow-wrap:anywhere; }
 .order-review-note { padding:16px;background:#f3f6ee;border-left:3px solid #b4c5a8;font-size:13px;line-height:1.8;overflow-wrap:anywhere; }
+.order-timeline { list-style:none;padding:0;margin:24px 0 0; }
+.order-timeline li { display:block;border-left:2px solid #d4dfcb;padding:8px 0 18px 20px;margin:0;background:transparent;border-radius:0;overflow-wrap:anywhere; }
+.order-timeline time { font-size:11px;color:#728277; }
+.order-timeline h3 { font-size:15px;line-height:1.7;margin:8px 0; }
+.order-timeline p { font-size:12px;line-height:1.8;margin:6px 0; }
 .order-work-panel .portfolio-links li { padding:0;background:transparent; }
 .order-work-panel .portfolio-links a { overflow-wrap:anywhere; }
 @media(max-width:480px) { .order-work-form { padding:16px; } .order-work-panel .portfolio-heading { flex-direction:column;align-items:start;gap:16px; } }
