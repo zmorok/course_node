@@ -1,7 +1,7 @@
 import { object } from './object.js';
 import { text,uuid,optional,integer,oneOf } from './fields.js';
 import { money,deadline } from './projects.js';
-function content(max){
+export function content(max){
   const parse=text({max});
   return (input,field,issues)=>{
     const value=parse(input,field,issues);

@@ -156,6 +156,16 @@ try {
   assert.equal((await request(`${frontend}/api/files/${projectFile.id}`)).status,404);
   assert.equal(await (await request(`${frontend}/api/files/${projectFile.id}`,{headers:authorHeaders})).text(),'Задание проекта');
   console.log('PASS: private proposals, duplicate prevention, acceptance, order snapshot and participant-only files through the proxy');
+  assert.equal((await request(`${frontend}/api/me/skills`,{method:'PUT',headers:authorHeaders,body:JSON.stringify({skillIds:[profileSkillId]})})).status,200);
+  const directoryResponse=await request(`${frontend}/api/freelancers?search=${author.user.username}&skill=${skillCatalog.skills[0].slug}&sort=name`);assert.equal(directoryResponse.status,200);
+  const directory=await directoryResponse.json();assert.equal(directory.total,1);assert.equal(directory.items[0].id,author.user.id);assert(!Object.hasOwn(directory.items[0],'email'));
+  const invitedProjectResponse=await request(`${frontend}/api/projects`,{method:'POST',headers:{...authHeaders,...authorization},body:JSON.stringify({title:`smoke-invitation-${authSuffix}`,description:'Приглашение исполнителя',categoryId:categories[0].id,budget:'2300.00'})});assert.equal(invitedProjectResponse.status,201);const invitedProject=(await invitedProjectResponse.json()).project;
+  assert.equal((await request(`${frontend}/api/projects/${invitedProject.id}/publish`,{method:'POST',headers:{...authHeaders,...authorization},body:'{}'})).status,200);
+  const picker=await request(`${frontend}/api/freelancers/${author.user.id}/projects`,{headers:authorization});assert.equal(picker.status,200);assert((await picker.json()).projects.some(row=>row.id===invitedProject.id));
+  const invitationResponse=await request(`${frontend}/api/projects/${invitedProject.id}/invitations`,{method:'POST',headers:{...authHeaders,...authorization},body:JSON.stringify({freelancerId:author.user.id,message:'Приглашаю выполнить проект',offeredPrice:'1900.75',offeredDeadlineAt:offer.offeredDeadlineAt})});assert.equal(invitationResponse.status,201);const invitation=(await invitationResponse.json()).invitation;
+  assert.equal((await request(`${frontend}/api/invitations/${invitation.id}/accept`,{method:'POST',headers:{...authHeaders,...authorization},body:'{}'})).status,404);
+  const invitationAccepted=await request(`${frontend}/api/invitations/${invitation.id}/accept`,{method:'POST',headers:authorHeaders,body:'{}'});assert.equal(invitationAccepted.status,200);const invitationOrder=(await invitationAccepted.json()).invitation.order;assert.equal(invitationOrder.agreedPrice,'1900.75');
+  console.log('PASS: public freelancer search and skill filtering, own project picker, recipient-only acceptance and invitation order through the proxy');
   await compose('exec', '-T', 'backend', 'node', 'src/commands/promote-admin.js', account.user.email);
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 200);
   console.log('PASS: registration, HttpOnly cookie, current user and CLIENT restriction through the frontend proxy');
@@ -213,6 +223,9 @@ try {
   const persistedOffer=(await persistedOfferResponse.json()).proposal;assert.equal(persistedOffer.status,'ACCEPTED');assert.equal(persistedOffer.order.id,agreement.id);assert.equal(persistedOffer.order.agreedPrice,'2100.50');
   assert.equal(await (await request(`${frontend}/api/files/${projectFile.id}`,{headers:authorHeaders})).text(),'Задание проекта');
   console.log('PASS: assigned project, accepted proposal, agreement snapshot and private attachment survive container replacement');
+  const persistedInvitationResponse=await request(`${frontend}/api/invitations/${invitation.id}`,{headers:authorHeaders});assert.equal(persistedInvitationResponse.status,200);const persistedInvitation=(await persistedInvitationResponse.json()).invitation;
+  assert.equal(persistedInvitation.status,'ACCEPTED');assert.equal(persistedInvitation.project.status,'IN_PROGRESS');assert.equal(persistedInvitation.order.id,invitationOrder.id);assert.equal(persistedInvitation.order.agreedPrice,'1900.75');
+  console.log('PASS: invitation, its agreed terms and order survive container replacement alongside the proposal order');
   assert.equal((await request(`${frontend}/api/auth/me`, { headers: authorization })).status, 200);
   const out = await request(`${frontend}/api/auth/logout`, { method: 'POST', headers: { ...authHeaders, Cookie: renewedCookie } });
   assert.equal(out.status, 204);

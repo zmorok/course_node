@@ -3,6 +3,7 @@ import {api} from './api.js';
 import {uploadFile} from './files.js';
 import {FileLink} from './PortfolioPanel.jsx';
 import {ProjectProposals} from './ProposalPages.jsx';
+import {InvitationList} from './InvitationPages.jsx';
 
 const statuses={DRAFT:'Черновик',OPEN:'Открыт',IN_PROGRESS:'В работе',COMPLETED:'Завершён',CANCELLED:'Отменён'};
 const money=value=>value===null?'Бюджет не указан':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(Number(value));
@@ -69,6 +70,7 @@ export function ProjectDetailsPage({projectId,user}){
       <section className="profile-card"><h2>Вложения</h2>{project.files.length?<div className="attachment-list">{project.files.map(file=><FileLink key={file.id} file={file} privateFile={project.status!=='OPEN'}/>)}</div>:<p className="profile-help">Вложений пока нет.</p>}</section>
       {project.cancellationReason&&<section className="profile-card"><h2>Причина отмены</h2><p className="public-description">{project.cancellationReason}</p></section>}
       <ProjectProposals key={`${project.id}-${user?.id??'guest'}`} project={project} user={user} onProjectChange={()=>api(`/projects/${projectId}`).then(data=>{setProject(data.project);setAction(null);}).catch(setError)}/>
+      {project.isOwn&&user?.role==='CLIENT'&&<section className="profile-card"><h2>Приглашения на проект</h2><p className="profile-help">{project.status==='OPEN'?'Откройте профиль исполнителя в каталоге, чтобы предложить ему этот проект.':'История приглашений и решений по этому проекту.'}</p><a className="text-link" href="/freelancers">Найти исполнителя ↗</a><InvitationList key={`${project.id}-${user.id}`} path={`/projects/${project.id}/invitations`} revision={project.status}/></section>}
     </div><aside className="profile-card project-summary"><p className="eyebrow">Условия проекта</p><p className="project-budget">{money(project.budget)}</p><dl><dt>Желаемый срок</dt><dd>{date(project.desiredDeadlineAt)}</dd><dt>Заказчик</dt><dd><a className="text-link" href={`/users/${project.customer.id}`}>{project.customer.firstName} {project.customer.lastName}</a></dd><dt>Создан</dt><dd>{date(project.createdAt)}</dd></dl>
       {editable&&<div className="project-owner-actions"><a className="button-link" href={`/projects/${project.id}/edit`}>Редактировать проект</a>{project.status==='DRAFT'&&<button disabled={busy} onClick={()=>command('publish')}>Опубликовать проект ↗</button>}
         <button className="secondary" disabled={busy} onClick={()=>{setAction('cancel');setError(null);}}>Отменить проект</button>{project.status==='DRAFT'&&<button className="text-button danger" disabled={busy} onClick={()=>{setAction('delete');setError(null);}}>Удалить черновик</button>}</div>}

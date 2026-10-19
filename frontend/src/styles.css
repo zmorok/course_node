@@ -267,4 +267,19 @@ select:focus { outline:2px solid #507d64;outline-offset:2px; }
 .proposal-reason { font-size:13px;line-height:1.8;overflow-wrap:anywhere;color:#728277; }
 .status-accepted { background:#e4efec;color:#285d51; }
 .status-rejected,.status-withdrawn { background:#f3ede5;color:#8b6b50; }
+.header { flex-wrap:wrap;gap:20px; }
+.profile-nav { max-width:100%; }
+.freelancer-heading { display:flex;align-items:center;gap:18px;flex-wrap:wrap; }
+.freelancer-heading .profile-avatar { width:58px;height:58px;font-size:20px;margin:0;flex-shrink:0; }
+.freelancer-heading h2 { margin:0 0 7px; }
+.freelancer-heading .profile-handle { margin:0; }
+.freelancer-rating { margin-left:auto;font-size:16px;color:#477456; }
+.freelancer-rating small { display:block;font-size:10px;color:#728277;margin-top:7px; }
+.freelancer-card .profile-tags:empty { display:none; }
+.invitation-tabs { display:flex;gap:24px;flex-wrap:wrap;margin-bottom:24px;font-size:14px; }
+.invitation-tabs a { padding-bottom:8px; }
+.invitation-tabs a[aria-current=page] { border-bottom:2px solid #477456; }
+.status-declined,.status-expired { background:#f3ede5;color:#8b6b50; }
+@media(max-width:800px) { .header .profile-nav { width:100%; } }
+@media(max-width:480px) { .freelancer-heading { gap:12px; } .freelancer-rating { width:100%;margin-left:0; } .freelancer-heading h2 { font-size:19px; } }
 @media(max-width:480px) { .proposal-terms { grid-template-columns:1fr; } .proposal-confirm,.proposal-agreement { padding:16px; } .proposal-actions { flex-direction:column;align-items:stretch; } .proposal-actions button { justify-content:center; } .proposal-actions .text-button { text-align:left; } }

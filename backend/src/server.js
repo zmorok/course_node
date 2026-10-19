@@ -22,6 +22,10 @@ import { createProposalRepository } from './repositories/proposal.repository.js'
 import { createAssignmentRepository } from './repositories/assignment.repository.js';
 import { createProposalService } from './services/proposal.service.js';
 import { createAssignmentService } from './services/assignment.service.js';
+import {createFreelancerRepository} from './repositories/freelancer.repository.js';
+import {createFreelancerService} from './services/freelancer.service.js';
+import {createInvitationRepository} from './repositories/invitation.repository.js';
+import {createInvitationService} from './services/invitation.service.js';
 
 let pool;
 try {
@@ -45,7 +49,10 @@ try {
     transaction:operation=>withTransaction(pool,client=>operation(createProjectRepository(client),createFileRepository(client)))});
   const proposalService=createProposalService({repository:createProposalRepository(pool),assignmentService:createAssignmentService(),
     transaction:operation=>withTransaction(pool,client=>operation(createProposalRepository(client),createAssignmentRepository(client)))});
-  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService });
+  const freelancerService=createFreelancerService({repository:createFreelancerRepository(pool)});
+  const invitationService=createInvitationService({repository:createInvitationRepository(pool),assignmentService:createAssignmentService(),
+    transaction:operation=>withTransaction(pool,client=>operation(createInvitationRepository(client),createAssignmentRepository(client),createProposalRepository(client)))});
+  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));
