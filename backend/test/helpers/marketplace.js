@@ -22,6 +22,8 @@ import {createInvitationRepository} from '../../src/repositories/invitation.repo
 import {createInvitationService} from '../../src/services/invitation.service.js';
 import {createAssignmentRepository} from '../../src/repositories/assignment.repository.js';
 import {createAssignmentService} from '../../src/services/assignment.service.js';
+import {createOrderRepository} from '../../src/repositories/order.repository.js';
+import {createOrderService} from '../../src/services/order.service.js';
 import {createApiRouter} from '../../src/routes/index.js';
 import {startApp} from './http.js';
 export const future=(days=30)=>new Date(Date.now()+days*86400000).toISOString();
@@ -35,7 +37,8 @@ export async function marketplace(context,pool,config,{failEvent=()=>false}={}){
   const proposalService=createProposalService({repository:createProposalRepository(pool),assignmentService:createAssignmentService(),transaction:op=>tx((c,a)=>op(createProposalRepository(c),a))});
   const invitationService=createInvitationService({repository:createInvitationRepository(pool),assignmentService:createAssignmentService(),transaction:op=>tx((c,a)=>op(createInvitationRepository(c),a,createProposalRepository(c)))});
   const freelancerService=createFreelancerService({repository:createFreelancerRepository(pool)});
-  const app=await startApp(context,createApiRouter({authService,authConfig:config.auth,fileService,profileService,projectService,proposalService,freelancerService,invitationService,healthService:{check:async()=>({status:'ok'})}}));
+  const orderService=createOrderService({repository:createOrderRepository(pool)});
+  const app=await startApp(context,createApiRouter({authService,authConfig:config.auth,fileService,profileService,projectService,proposalService,freelancerService,invitationService,orderService,healthService:{check:async()=>({status:'ok'})}}));
   const api=(actor,path,method='GET',body)=>app.request(`/api${path}`,{method,headers:{...(actor?{Authorization:`Bearer ${actor.token}`}:{ }),'Content-Type':'application/json','X-Workify-Client':'browser'},...(body===undefined?{}:{body:JSON.stringify(body)})});
   return {...app,api,async register(patch={}){const suffix=randomUUID().replaceAll('-','');const result=await api(null,'/auth/register','POST',{email:`${suffix}@example.invalid`,username:`i_${suffix}`,firstName:'Участник',lastName:'Тест',password:'invitation test password',...patch});assert.equal(result.response.status,201);return {id:result.body.user.id,token:result.body.accessToken,user:result.body.user};},
     async project(owner,{file=false,draft=false}={}){let fileId;if(file){const form=new FormData();form.append('file',new Blob(['Задание по приглашению'],{type:'text/plain'}),'Задание.txt');const uploaded=await app.request('/api/files',{method:'POST',headers:{Authorization:`Bearer ${owner.token}`},body:form});assert.equal(uploaded.response.status,201);fileId=uploaded.body.file.id;}

@@ -87,6 +87,7 @@ export function AccountPanel({ user, onLogout, onRefresh, onAdminCheck }) {
     <div className="account-actions">
       <a className="button-link" href="/me/profile">Мой профиль<span aria-hidden="true">↗</span></a>
       {user.role==='CLIENT'&&<a className="button-link" href="/me/projects">Мои проекты<span aria-hidden="true">↗</span></a>}
+      {user.role==='CLIENT'&&<a className="button-link" href="/me/orders">Мои заказы<span aria-hidden="true">↗</span></a>}
       <button type="button" disabled={busy} onClick={() => run(onRefresh)}>Обновить данные<span aria-hidden="true">↻</span></button>
       {user.role === 'ADMIN' && <button type="button" disabled={busy} onClick={() => run(onAdminCheck)}>Проверить доступ администратора</button>}
       <button type="button" className="secondary" disabled={busy} onClick={() => run(onLogout)}>Выйти из аккаунта</button>

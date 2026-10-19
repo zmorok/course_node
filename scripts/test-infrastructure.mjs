@@ -166,8 +166,20 @@ try {
   assert.equal((await request(`${frontend}/api/invitations/${invitation.id}/accept`,{method:'POST',headers:{...authHeaders,...authorization},body:'{}'})).status,404);
   const invitationAccepted=await request(`${frontend}/api/invitations/${invitation.id}/accept`,{method:'POST',headers:authorHeaders,body:'{}'});assert.equal(invitationAccepted.status,200);const invitationOrder=(await invitationAccepted.json()).invitation.order;assert.equal(invitationOrder.agreedPrice,'1900.75');
   console.log('PASS: public freelancer search and skill filtering, own project picker, recipient-only acceptance and invitation order through the proxy');
+  const customerOrders=await (await request(`${frontend}/api/me/orders?mode=customer&scope=active`,{headers:authorization})).json();
+  assert.equal(customerOrders.total,2);assert(customerOrders.items.every(row=>row.participantMode==='customer'));
+  const freelancerOrders=await (await request(`${frontend}/api/me/orders?mode=freelancer&scope=active`,{headers:authorHeaders})).json();
+  assert.equal(freelancerOrders.total,2);assert(freelancerOrders.items.every(row=>row.participantMode==='freelancer'));
+  assert.equal((await (await request(`${frontend}/api/me/orders?mode=customer&scope=history`,{headers:authorization})).json()).total,0);
+  const orderResponse=await request(`${frontend}/api/orders/${agreement.id}`,{headers:authorHeaders});assert.equal(orderResponse.status,200);
+  const orderDetails=(await orderResponse.json()).order;assert.equal(orderDetails.title,draftProject.title);assert.equal(orderDetails.files[0].id,projectFile.id);
+  assert.equal(orderDetails.permissions.submit,true);assert.equal(orderDetails.permissions.acceptSubmission,false);
+  assert.equal((await request(`${frontend}/api/orders/${agreement.id}`)).status,401);
+  assert.equal((await request(`${frontend}/api/orders/${agreement.id}`,{method:'PATCH',headers:authorHeaders,body:JSON.stringify({status:'COMPLETED'})})).status,404);
+  console.log('PASS: customer/freelancer order lists, empty history, private snapshots, action matrix and rejection of arbitrary status changes');
   await compose('exec', '-T', 'backend', 'node', 'src/commands/promote-admin.js', account.user.email);
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 200);
+  assert.equal((await request(`${frontend}/api/me/orders`,{headers:authorization})).status,403);
   console.log('PASS: registration, HttpOnly cookie, current user and CLIENT restriction through the frontend proxy');
 
   const page = await request(frontend);
@@ -223,6 +235,9 @@ try {
   const persistedOffer=(await persistedOfferResponse.json()).proposal;assert.equal(persistedOffer.status,'ACCEPTED');assert.equal(persistedOffer.order.id,agreement.id);assert.equal(persistedOffer.order.agreedPrice,'2100.50');
   assert.equal(await (await request(`${frontend}/api/files/${projectFile.id}`,{headers:authorHeaders})).text(),'Задание проекта');
   console.log('PASS: assigned project, accepted proposal, agreement snapshot and private attachment survive container replacement');
+  const restoredOrders=await (await request(`${frontend}/api/me/orders?mode=freelancer`,{headers:authorHeaders})).json();assert.equal(restoredOrders.total,2);
+  for(const id of [agreement.id,invitationOrder.id]){const response=await request(`${frontend}/api/orders/${id}`,{headers:authorHeaders});assert.equal(response.status,200);const order=(await response.json()).order;assert.equal(order.status,'IN_PROGRESS');assert.equal(order.permissions.submit,true);}
+  console.log('PASS: both order sources, participant mode and action matrix survive container replacement');
   const persistedInvitationResponse=await request(`${frontend}/api/invitations/${invitation.id}`,{headers:authorHeaders});assert.equal(persistedInvitationResponse.status,200);const persistedInvitation=(await persistedInvitationResponse.json()).invitation;
   assert.equal(persistedInvitation.status,'ACCEPTED');assert.equal(persistedInvitation.project.status,'IN_PROGRESS');assert.equal(persistedInvitation.order.id,invitationOrder.id);assert.equal(persistedInvitation.order.agreedPrice,'1900.75');
   console.log('PASS: invitation, its agreed terms and order survive container replacement alongside the proposal order');

@@ -26,6 +26,8 @@ import {createFreelancerRepository} from './repositories/freelancer.repository.j
 import {createFreelancerService} from './services/freelancer.service.js';
 import {createInvitationRepository} from './repositories/invitation.repository.js';
 import {createInvitationService} from './services/invitation.service.js';
+import {createOrderRepository} from './repositories/order.repository.js';
+import {createOrderService} from './services/order.service.js';
 
 let pool;
 try {
@@ -52,7 +54,8 @@ try {
   const freelancerService=createFreelancerService({repository:createFreelancerRepository(pool)});
   const invitationService=createInvitationService({repository:createInvitationRepository(pool),assignmentService:createAssignmentService(),
     transaction:operation=>withTransaction(pool,client=>operation(createInvitationRepository(client),createAssignmentRepository(client),createProposalRepository(client)))});
-  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService });
+  const orderService=createOrderService({repository:createOrderRepository(pool)});
+  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));
