@@ -1,3 +1,4 @@
+import {Pagination,ErrorMessage,StatusBadge} from './Ui.jsx';
 import React,{useEffect,useState} from 'react';
 import {api} from './api.js';
 import {uploadFile} from './files.js';
@@ -8,9 +9,8 @@ import {InvitationList} from './InvitationPages.jsx';
 const statuses={DRAFT:'Черновик',OPEN:'Открыт',IN_PROGRESS:'В работе',COMPLETED:'Завершён',CANCELLED:'Отменён'};
 const money=value=>value===null?'Бюджет не указан':new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(Number(value));
 const date=value=>value?new Date(value).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}):'Не указан';
-function ErrorMessage({error}){return error?<div className="form-error" role="alert">{error.message}{error.details?.map(issue=><small key={issue.field}>{issue.message}</small>)}</div>:null;}
 function AccessDenied(){return <section className="profile-card"><h1>Раздел доступен клиенту</h1><a className="text-link" href="/projects">Перейти в каталог</a></section>;}
-function Badge({status}){return <span className={`project-status status-${status.toLowerCase()}`}>{statuses[status]}</span>;}
+function Badge({status}){return <StatusBadge status={status} labels={statuses}/>;}
 function Tags({skills}){return <div className="profile-tags">{skills.map(skill=><span key={skill.id}>{skill.name}</span>)}</div>;}
 function ProjectCard({project}){return <article className="profile-card project-card">
   <div className="project-card-top"><span className="project-category">{project.category?.name??'Категория не выбрана'}</span><Badge status={project.status}/>{project.isOwn&&<span className="project-own">Ваш проект</span>}</div>
@@ -48,7 +48,7 @@ export function ProjectListPage({user,mine=false}){
       {loading?<div className="profile-card" role="status">Загружаем проекты…</div>:error?<div className="profile-card"><ErrorMessage error={error}/><button className="secondary" onClick={()=>setAttempt(value=>value+1)}>Повторить</button></div>:<>
         <p className="project-result-count" role="status">Найдено проектов: {data.total}</p>{data.items.map(project=><ProjectCard key={project.id} project={project}/>)}
         {!data.items.length&&<div className="profile-card project-empty"><h2>{data.total?'На этой странице нет проектов':'Проекты не найдены'}</h2><p className="profile-help">{mine&&!query?'Создайте черновик, добавьте описание и опубликуйте задание.':'Попробуйте изменить фильтры или вернуться на первую страницу.'}</p><a className="text-link" href={path}>Вернуться к списку</a></div>}
-        {data.total>0&&<nav className="project-pagination" aria-label="Страницы проектов">{data.page>1&&<a href={pageUrl(data.page-1)}>← Назад</a>}<span>Страница {data.page} из {Math.ceil(data.total/data.pageSize)}</span>{data.page*data.pageSize<data.total&&<a href={pageUrl(data.page+1)}>Далее →</a>}</nav>}
+        <Pagination data={data} href={pageUrl} label="Страницы проектов"/>
       </>}
     </section></div></>;
 }

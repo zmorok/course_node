@@ -1,6 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {api} from './api.js';
-import {useRemote,RemoteState,ErrorMessage,Pages,listPage} from './AdminPage.jsx';
+import {useRemote,RemoteState,ErrorMessage,Pages,listPage} from './Ui.jsx';
 
 export function NotificationLink({current}) {
   const [count,setCount]=useState(null);

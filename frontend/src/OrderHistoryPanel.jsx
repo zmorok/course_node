@@ -1,9 +1,9 @@
+import {ErrorMessage} from './Ui.jsx';
 import React,{useEffect,useState} from 'react';
 import {api} from './api.js';
 const titles={ORDER_CREATED:'Заказ создан',SUBMISSION_CREATED:'Результат передан на проверку',REVISION_REQUESTED:'Запрошена доработка',ORDER_COMPLETED:'Работа принята, заказ завершён',ORDER_CANCELLED:'Заказ отменён, проект снова открыт',DEADLINE_REQUESTED:'Предложен новый срок',DEADLINE_APPROVED:'Новый срок согласован',DEADLINE_REJECTED:'Изменение срока отклонено',DEADLINE_EXPIRED:'Запрос срока закрыт'};
 const reasons={ORDER_SUBMITTED:'Работа передана на проверку',ORDER_COMPLETED:'Заказ завершён',ORDER_CANCELLED:'Заказ отменён',TIME_EXPIRED:'Предложенная дата прошла',DEADLINE_CHANGED:'Исходный срок изменился'};
 const date=value=>new Date(value).toLocaleString('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
-function ErrorMessage({error}){return error?<div className="form-error" role="alert">{error.message}{error.details?.map(issue=><small key={issue.field}>{issue.message}</small>)}</div>:null;}
 export function OrderHistoryPanel({order,onChange}){
   const path=`/orders/${order.id}`;
   const [data,setData]=useState(null),[page,setPage]=useState(1),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState(null),[attempt,setAttempt]=useState(0);

@@ -1,4 +1,5 @@
-import {NotificationLink,NotificationsPage} from './Notifications.jsx';
+import {SiteNavigation} from './SiteNavigation.jsx';
+import {NotificationsPage} from './Notifications.jsx';
 import React, { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
@@ -78,12 +79,12 @@ function App() {
   const profileView = Boolean(publicMatch || (ownProfile && user) || projectView);
   return (
     <div className={profileView ? 'page profile-page' : 'page'}>
+      <a className="skip-link" href="#main-content">К содержимому</a>
       <header className="header">
         <a className="brand" href="/" aria-label="Workify — главная"><span className="brand-mark">w.</span>workify</a>
-        {user ? <nav className="profile-nav" aria-label="Навигация"><a href="/projects" aria-current={catalog?'page':undefined}>Каталог</a><a href="/freelancers" aria-current={freelancers?'page':undefined}>Исполнители</a>{user.role==='CLIENT'&&<><a href="/me/projects" aria-current={ownProjects?'page':undefined}>Мои проекты</a><a href="/me/orders" aria-current={ownOrders||orderMatch?'page':undefined}>Заказы</a><a href="/me/reviews" aria-current={ownReviews?'page':undefined}>Отзывы</a><a href="/me/complaints" aria-current={ownComplaints||complaintMatch?'page':undefined}>Жалобы</a><a href="/me/warnings" aria-current={ownWarnings?'page':undefined}>Предупреждения</a><a href="/me/proposals" aria-current={ownProposals?'page':undefined}>Мои отклики</a><a href="/me/invitations" aria-current={ownInvitations?'page':undefined}>Приглашения</a></>}{user.role==='ADMIN'&&<a href="/admin/complaints" aria-current={adminView?'page':undefined}>Администрирование</a>}<NotificationLink key={user.id} current={ownNotifications}/><a href="/me/profile" aria-current={ownProfile ? 'page' : undefined}>Мой профиль</a><a href="/">Аккаунт</a></nav>
-          : <nav className="profile-nav" aria-label="Навигация"><a href="/projects">Каталог проектов</a><a href="/freelancers">Исполнители</a><a href="/">Войти</a></nav>}
+        <SiteNavigation user={user}/>
       </header>
-      <main className={profileView ? 'profile-main' : undefined}>
+      <main id="main-content" tabIndex={-1} className={profileView ? 'profile-main' : undefined}>
         {projectView && restoring ? <div className="profile-card" role="status">Загружаем рабочее пространство…</div>
           : catalog ? <ProjectListPage user={user}/>
           : freelancers ? <FreelancerPage/>

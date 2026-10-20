@@ -1,3 +1,4 @@
+import {ErrorMessage} from './Ui.jsx';
 import React,{useEffect,useState} from 'react';
 import {api} from './api.js';
 import {FileLink} from './PortfolioPanel.jsx';
@@ -6,7 +7,6 @@ const statuses={PENDING:'Ожидает решения',ACCEPTED:'Принят',
 const reasons={AUTHOR_WITHDRAWN:'Отозван исполнителем',CUSTOMER_REJECTED:'Отклонён заказчиком',TERMS_CHANGED:'Условия проекта изменились',PROJECT_CANCELLED:'Проект отменён',OTHER_SOURCE_ACCEPTED:'Выбран другой исполнитель',TERMS_EXPIRED:'Предложенный срок истёк'};
 const price=value=>value===null?'Не указана':new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value));
 const date=value=>new Date(value).toLocaleString('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
-function ErrorMessage({error}){return error?<div className="form-error" role="alert">{error.message}{error.details?.map(issue=><small key={issue.field}>{issue.message}</small>)}</div>:null;}
 
 export function Agreement({order}){
   return <section className="proposal-agreement" aria-label="Согласованные условия заказа"><p className="eyebrow">{{IN_PROGRESS:'Заказ в работе',SUBMITTED:'Результат на проверке',REVISION_REQUESTED:'Ожидается доработка',COMPLETED:'Заказ завершён',CANCELLED:'Заказ отменён'}[order.status]}</p><h3>{order.title}</h3>
