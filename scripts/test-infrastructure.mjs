@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import {verifySetupEnv} from './verify-setup-env.mjs';
 
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -60,6 +61,7 @@ async function expectHealth(base, expectedStatus, database) {
 
 try {
   console.log(`Checking Compose in an isolated project: ${project}`);
+  await verifySetupEnv();
   await compose('config', '--quiet');
   created = true;
   await compose('up', '--build', '-d', '--wait', '--wait-timeout', '120');
