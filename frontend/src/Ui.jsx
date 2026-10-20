@@ -5,8 +5,8 @@ import { api } from './api.js';
 
 export function ErrorMessage({ error }) {
   if (!error) return null;
-  const details = [...new Set(error.details?.map((issue) => issue.message) ?? [])];
-  return <div className="form-error" role="alert"><strong>{error.message}</strong>{details.length > 0 && <ul>{details.map((message) => <li key={message}>{message}</li>)}</ul>}</div>;
+  const details = [...new Set(error.details?.map((issue) => t(issue.message)) ?? [])];
+  return <div className="form-error" role="alert"><strong>{t(error.message)}</strong>{details.length > 0 && <ul>{details.map((message) => <li key={message}>{t(message)}</li>)}</ul>}</div>;
 }
 export function StatusBadge({ status, labels }) {
   return <span className={`project-status status-${String(status).toLowerCase()}`}>{labels?.[status] ?? status}</span>;

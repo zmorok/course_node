@@ -1,7 +1,10 @@
 import {english} from './en.js';
 import {getLanguage} from './preferences.js';
 export const locale=()=>getLanguage()==='en'?'en-GB':'ru-RU';
+const messageKey = Symbol('interface-message');
+export const uiMessage = (key, values = []) => ({ [messageKey]: true, key, values });
 export function t(message,values=[],language=getLanguage()){
+ if(message?.[messageKey])return t(message.key,message.values.map(value=>value?.[messageKey]?t(value,[],language):value),language);
  if(typeof message!=='string')return message;
  const key=message.trim(),translation=language==='en'?english[key]??key:key;
  const leading=message.match(/^\s*/)[0],trailing=message.match(/\s*$/)[0];

@@ -1,6 +1,6 @@
 import { navigate, getLocation } from './navigation.js';
 import { Link } from './Navigation.jsx';
-import { t, locale } from "./i18n.js";import { Pagination, ErrorMessage, StatusBadge } from './Ui.jsx';
+import { uiMessage, t, locale } from "./i18n.js";import { Pagination, ErrorMessage, StatusBadge } from './Ui.jsx';
 import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { uploadFile } from './files.js';
@@ -8,11 +8,11 @@ import { FileLink } from './PortfolioPanel.jsx';
 import { ProjectProposals } from './ProposalPages.jsx';
 import { InvitationList } from './InvitationPages.jsx';
 
-const statuses = { DRAFT: t("Черновик"), OPEN: t("Открыт"), IN_PROGRESS: t("В работе"), COMPLETED: t("Завершён"), CANCELLED: t("Отменён") };
+const statuses = () => ({ DRAFT: t("Черновик"), OPEN: t("Открыт"), IN_PROGRESS: t("В работе"), COMPLETED: t("Завершён"), CANCELLED: t("Отменён") });
 const money = (value) => value === null ? t("Бюджет не указан") : new Intl.NumberFormat(locale(), { maximumFractionDigits: 2 }).format(Number(value));
 const date = (value) => value ? new Date(value).toLocaleDateString(locale(), { day: 'numeric', month: 'long', year: 'numeric' }) : t("Не указан");
 function AccessDenied() {return <section className="profile-card"><h1>{t("Раздел доступен клиенту")}</h1><Link className="text-link" href="/projects">{t("Перейти в каталог")}</Link></section>;}
-function Badge({ status }) {return <StatusBadge status={status} labels={statuses} />;}
+function Badge({ status }) {return <StatusBadge status={status} labels={statuses()} />;}
 function Tags({ skills }) {return <div className="profile-tags">{skills.map((skill) => <span key={skill.id}>{t(skill.name)}</span>)}</div>;}
 function ProjectCard({ project }) {return <article className="profile-card project-card">
   <div className="project-card-top"><span className="project-category">{t(project.category?.name) ?? t("Категория не выбрана")}</span><Badge status={project.status} />{project.isOwn && <span className="project-own">{t("Ваш проект")}</span>}</div>
@@ -43,7 +43,7 @@ export function ProjectListPage({ user, mine = false }) {
       {select('category', t("Категория"), [['', t("Все категории")], ...categories.map((category) => [category.slug, t(category.name)])])}
       {select('skill', t("Навык"), [['', t("Любой навык")], ...skills.map((skill) => [skill.slug, t(skill.name)])])}
       <div className="budget-filters">{field('minBudget', t("Бюджет от"), 'number')}{field('maxBudget', t("Бюджет до"), 'number')}</div>
-      {mine && select('status', t("Статус"), [['', t("Все статусы")], ...Object.entries(statuses)])}
+      {mine && select('status', t("Статус"), [['', t("Все статусы")], ...Object.entries(statuses())])}
       {select('sort', t("Сортировка"), [['newest', t("Сначала новые")], ['oldest', t("Сначала старые")], ['budget_desc', t("Бюджет по убыванию")], ['budget_asc', t("Бюджет по возрастанию")], ['deadline_asc', t("Ближайший срок")]])}
       <button type="submit" className="submit">{t("Применить фильтры ")}<span aria-hidden="true">↗</span></button><Link className="filter-reset text-link" href={path}>{t("Сбросить")}</Link>
     </form></aside><section className="project-results" aria-label={mine ? t("Ваши проекты") : t("Открытые проекты")}>
@@ -62,7 +62,7 @@ export function ProjectDetailsPage({ projectId, user }) {
     catch((problem) => {if (active) setError(problem);}).finally(() => {if (active) setLoading(false);});return () => {active = false;};}, [projectId, user?.id, attempt]);
   async function command(kind) {setBusy(true);setError(null);setMessage('');try {
       if (kind === 'delete') {await api(`/projects/${projectId}`, { method: 'DELETE' });navigate('/me/projects');return;}
-      const result = await api(`/projects/${projectId}/${kind}`, { method: 'POST', body: kind === 'cancel' ? { reason } : {} });setProject(result.project);setAction(null);setMessage(kind === 'publish' ? t("Проект опубликован в каталоге") : t("Проект отменён"));
+      const result = await api(`/projects/${projectId}/${kind}`, { method: 'POST', body: kind === 'cancel' ? { reason } : {} });setProject(result.project);setAction(null);setMessage(kind === 'publish' ? uiMessage("Проект опубликован в каталоге") : uiMessage("Проект отменён"));
     } catch (problem) {setError(problem);} finally {setBusy(false);}}
   if (loading) return <div className="profile-card" role="status">{t("Загружаем проект…")}</div>;
   if (!project) return <section className="profile-card"><h1>{t("Не удалось открыть проект")}</h1><ErrorMessage error={error} />{error?.status !== 404 && <button onClick={() => setAttempt((value) => value + 1)}>{t("Повторить")}</button>}<Link className="text-link" href="/projects">{t("В каталог")}</Link></section>;
@@ -78,7 +78,7 @@ export function ProjectDetailsPage({ projectId, user }) {
         <button className="secondary" disabled={busy} onClick={() => {setAction('cancel');setError(null);}}>{t("Отменить проект")}</button>{project.status === 'DRAFT' && <button className="text-button danger" disabled={busy} onClick={() => {setAction('delete');setError(null);}}>{t("Удалить черновик")}</button>}</div>}
       {action === 'cancel' && <form className="project-confirm" onSubmit={(event) => {event.preventDefault();command('cancel');}}><fieldset disabled={busy}><div className="field"><label htmlFor="cancel-reason">{t("Причина отмены проекта")}</label><textarea id="cancel-reason" required maxLength={1000} rows={3} value={reason} onChange={(event) => setReason(event.target.value)} /></div><p className="profile-help">{t("Проект останется в вашей истории и уйдёт из каталога.")}</p><button type="submit">{t("Подтвердить отмену")}</button><button type="button" className="text-button" onClick={() => setAction(null)}>{t("Продолжить работу")}</button></fieldset></form>}
       {action === 'delete' && <div className="project-confirm"><p>{t("Удалить черновик и его вложения?")}</p><button disabled={busy} onClick={() => command('delete')}>{t("Да, удалить черновик")}</button><button className="text-button" disabled={busy} onClick={() => setAction(null)}>{t("Оставить")}</button></div>}
-      <ErrorMessage error={error} /><p className="save-message" role="status">{message}</p>{project.status === 'DRAFT' && <p className="profile-help">{t("Черновик доступен только вам. Для публикации нужны описание и категория.")}</p>}
+      <ErrorMessage error={error} /><p className="save-message" role="status">{t(message)}</p>{project.status === 'DRAFT' && <p className="profile-help">{t("Черновик доступен только вам. Для публикации нужны описание и категория.")}</p>}
     </aside></div></>;
 }
 

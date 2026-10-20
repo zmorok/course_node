@@ -9,11 +9,14 @@ if (channel) channel.onmessage = (event) => {if (event.data === 'logout') forget
 
 export class ApiError extends Error {
   constructor(status, data) {
-    super(errorText(data?.error?.message ?? data?.message ?? t("Сервис временно недоступен. Повторите позже")));
+    super();
+    this.sourceMessage = data?.error?.message ?? data?.message ?? 'Сервис временно недоступен. Повторите позже';
     this.status = status;
     this.code = data?.error?.code;
-    this.details = (data?.error?.details ?? []).map(issue=>({...issue,message:errorText(issue.message,'Check this field.')}));
+    this.sourceDetails = data?.error?.details ?? [];
   }
+  get message() { return errorText(this.sourceMessage); }
+  get details() { return this.sourceDetails.map(issue => ({ ...issue, message: errorText(issue.message, 'Check this field.') })); }
 }
 async function send(path, { method = 'GET', body, responseType } = {}) {
   let response;

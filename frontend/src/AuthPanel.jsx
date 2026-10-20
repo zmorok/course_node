@@ -1,12 +1,12 @@
 import { Link } from './Navigation.jsx';
-import { t, locale } from "./i18n.js";import React, { useState } from 'react';
+import { uiMessage, t, locale } from "./i18n.js";import React, { useState } from 'react';
 import { ErrorMessage } from './Ui.jsx';
 
-const fields = {
+const fields = () => ({
   firstName: [t("Имя"), 'text', 'given-name'], lastName: [t("Фамилия"), 'text', 'family-name'],
   username: [t("Имя пользователя"), 'text', 'username'], email: ['Email', 'email', 'email'],
   password: [t("Пароль"), 'password', 'current-password']
-};
+});
 
 export function AuthPanel({ onAuthenticate, restoring, notice }) {
   const [mode, setMode] = useState('login');
@@ -18,7 +18,7 @@ export function AuthPanel({ onAuthenticate, restoring, notice }) {
     event.preventDefault();
     const values = Object.fromEntries(new FormData(event.currentTarget));
     if (isRegister && values.password !== values.confirmPassword) {
-      setProblem({ message: t("Пароли не совпадают"), details: [{ field: 'body.confirmPassword', message: t("Повторите тот же пароль") }] });
+      setProblem({ message: uiMessage("Пароли не совпадают"), details: [{ field: 'body.confirmPassword', message: uiMessage("Повторите тот же пароль") }] });
       return;
     }
     delete values.confirmPassword;
@@ -41,12 +41,12 @@ export function AuthPanel({ onAuthenticate, restoring, notice }) {
       <p className="auth-description">{isRegister ? t("Один аккаунт — для своих проектов и работы исполнителем.") : t("Продолжите работу над тем, что важно.")}</p>
       {restoring ? <p role="status">{t("Восстанавливаем сессию…")}</p> : <>
         <ErrorMessage error={problem} />
-        {!problem && notice && <p className="form-notice" role="status">{notice}</p>}
+        {!problem && notice && <p className="form-notice" role="status">{t(notice)}</p>}
         <form key={mode} onSubmit={submit} aria-busy={busy}>
           <fieldset disabled={busy}>
             <div className={isRegister ? 'form-fields register-fields' : 'form-fields'}>
               {names.map((name) => {
-                const [label, type, complete] = fields[name] ?? [t("Повторите пароль"), 'password', 'new-password'];
+                const [label, type, complete] = fields()[name] ?? [t("Повторите пароль"), 'password', 'new-password'];
                 const issue = problem?.details?.find((item) => item.field === `body.${name}`);
                 return <div className={`field field-${name}`} key={name}>
                   <label htmlFor={`auth-${name}`}>{label}</label>
@@ -58,7 +58,7 @@ export function AuthPanel({ onAuthenticate, restoring, notice }) {
                   aria-invalid={Boolean(issue)} aria-describedby={issue ? `${name}-error` : name === 'password' && isRegister ? 'password-hint' : name === 'username' ? 'username-hint' : undefined} />
                   {name === 'username' && <small id="username-hint">{t("3–40 символов: латиница, цифры и _")}</small>}
                   {name === 'password' && isRegister && <small id="password-hint">{t("От 12 до 128 символов. Пробелы учитываются.")}</small>}
-                  {issue && <small className="field-error" id={`${name}-error`}>{issue.message}</small>}
+                  {issue && <small className="field-error" id={`${name}-error`}>{t(issue.message)}</small>}
                 </div>;
               })}
             </div>
@@ -96,6 +96,6 @@ export function AccountPanel({ user, onLogout, onRefresh, onAdminCheck }) {
       {user.role === 'ADMIN' && <button type="button" disabled={busy} onClick={() => run(onAdminCheck)}>{t("Проверить доступ администратора")}</button>}
       <button type="button" className="secondary" disabled={busy} onClick={() => run(onLogout)}>{t("Выйти из аккаунта")}</button>
     </div>
-    {message && <p role="status" className="account-message">{message}</p>}
+    {message && <p role="status" className="account-message">{t(message)}</p>}
   </section>;
 }

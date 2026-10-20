@@ -1,5 +1,5 @@
 import { Link } from './Navigation.jsx';
-import { t, locale } from "./i18n.js";import { ErrorMessage } from './Ui.jsx';
+import { uiMessage, t, locale } from "./i18n.js";import { ErrorMessage } from './Ui.jsx';
 import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { uploadFile as upload } from './files.js';
@@ -59,7 +59,7 @@ export function PortfolioPanel({ userId, editable = false }) {
     try {
       const { item } = await api(draft.id ? `${path}/${draft.id}` : path, { method: draft.id ? 'PUT' : 'POST', body: { title: draft.title, description: draft.description, experience: draft.experience, skills: (draft.skills ?? []).map((value) => value.trim()).filter(Boolean),
           links: links.split('\n').map((value) => value.trim()).filter(Boolean), fileIds: draft.files.map((file) => file.id) } });
-      setItems((previous) => draft.id ? previous.map((value) => value.id === item.id ? item : value) : [item, ...previous]);setDraft(null);setMessage(t("Работа сохранена"));
+      setItems((previous) => draft.id ? previous.map((value) => value.id === item.id ? item : value) : [item, ...previous]);setDraft(null);setMessage(uiMessage("Работа сохранена"));
       await files();
     } catch (problem) {setError(problem);} finally {setBusy(false);}
   }
@@ -70,7 +70,7 @@ export function PortfolioPanel({ userId, editable = false }) {
   }
   async function removeItem(id) {
     setBusy(true);setError(null);
-    try {await api(`${path}/${id}`, { method: 'DELETE' });setItems((previous) => previous.filter((item) => item.id !== id));setConfirmId(null);setMessage(t("Работа и её вложения удалены"));await files();}
+    try {await api(`${path}/${id}`, { method: 'DELETE' });setItems((previous) => previous.filter((item) => item.id !== id));setConfirmId(null);setMessage(uiMessage("Работа и её вложения удалены"));await files();}
     catch (problem) {setError(problem);} finally {setBusy(false);}
   }
   const locked = busy || uploading;
@@ -110,6 +110,6 @@ export function PortfolioPanel({ userId, editable = false }) {
         <p className="profile-help">{t("Доступны только вам. Прикрепите их к работе или удалите.")}</p>{available.filter((file) => !file.inUse).map((file) => <div className="attachment-row" key={file.id}><FileLink file={file} privateFile />
           <button className="text-button danger" disabled={locked} onClick={async () => {setBusy(true);setError(null);try {await api(`/files/${file.id}`, { method: 'DELETE' });await files();} catch (problem) {setError(problem);} finally {setBusy(false);}}}>{t("Удалить файл")}</button></div>)}</details>}
     </>}
-    <p className="save-message" role="status">{message}</p>
+    <p className="save-message" role="status">{t(message)}</p>
   </section>;
 }

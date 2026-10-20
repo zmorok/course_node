@@ -1,5 +1,5 @@
 import { navigate } from './navigation.js';
-import { t, locale } from "./i18n.js";import React, { useState } from 'react';
+import { uiMessage, t, locale } from "./i18n.js";import React, { useState } from 'react';
 import { api, logout } from './api.js';
 import { ErrorMessage } from './Ui.jsx';
 
@@ -8,7 +8,7 @@ export function PasswordChange() {
   const [busy, setBusy] = useState(false),[error, setError] = useState(null);
   async function submit(event) {
     event.preventDefault();setError(null);
-    if (draft.newPassword !== draft.repeat) {setError({ message: t("Новые пароли не совпадают") });return;}
+    if (draft.newPassword !== draft.repeat) {setError({ message: uiMessage("Новые пароли не совпадают") });return;}
     setBusy(true);
     try {await api('/me/password', { method: 'POST', body: { currentPassword: draft.currentPassword, newPassword: draft.newPassword } });await logout();navigate('/?passwordChanged=1');}
     catch (problem) {setError(problem);setBusy(false);}

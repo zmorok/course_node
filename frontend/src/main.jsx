@@ -1,5 +1,5 @@
 import { Link, useLocation, RouteFocus } from './Navigation.jsx';
-import { t, locale } from "./i18n.js";import { Preferences } from './Preferences.jsx';
+import { uiMessage, t, locale } from "./i18n.js";import { Preferences, usePreferences } from './Preferences.jsx';
 import { SiteNavigation } from './SiteNavigation.jsx';
 import { NotificationsPage } from './Notifications.jsx';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -20,6 +20,7 @@ import { AuditPage } from './AuditPage.jsx';
 
 function App() {
   const location = useLocation();
+  usePreferences();
   const [user, setUser] = useState(null);
   const [restoring, setRestoring] = useState(true);
   const [notice, setNotice] = useState(new URLSearchParams(location.search).has('passwordChanged') ? t("Пароль изменён. Войдите с новым паролем.") : '');
@@ -36,7 +37,7 @@ function App() {
     restoreSession().then((value) => {if (active) setUser(value);}).catch((error) => {
       if (active && error.status !== 401) {setNotice(error.message);setRestoreFailed(error.status !== 403);}
     }).finally(() => {if (active) setRestoring(false);});
-    const ended = (event) => {setUser(null);setNotice(event.detail ?? t("Вы вышли из аккаунта"));};
+    const ended = (event) => {setUser(null);setNotice(event.detail ?? uiMessage("Вы вышли из аккаунта"));};
     window.addEventListener('workify:session-ended', ended);
     return () => {active = false;window.removeEventListener('workify:session-ended', ended);};
   }, []);
@@ -117,8 +118,8 @@ function App() {
         </section>
         <aside className="auth-area" aria-label={t("Аккаунт Workify")}>
           {user ? <AccountPanel user={user} onLogout={logout}
-            onRefresh={async () => {const result = await api('/auth/me');setUser(result.user);return t("Данные аккаунта обновлены");}}
-            onAdminCheck={async () => {await api('/admin/access');return t("Доступ администратора подтверждён");}} /> :
+            onRefresh={async () => {const result = await api('/auth/me');setUser(result.user);return uiMessage("Данные аккаунта обновлены");}}
+            onAdminCheck={async () => {await api('/admin/access');return uiMessage("Доступ администратора подтверждён");}} /> :
             <AuthPanel restoring={restoring} notice={new URLSearchParams(location.search).has('passwordChanged') ? t("Пароль изменён. Войдите с новым паролем.") : notice} onAuthenticate={async (mode, values) => {setUser(await authenticate(mode, values));setNotice('');setRestoreFailed(false);}} />}
           {restoreFailed && !restoring && !user && <button className="restore-button secondary" onClick={restore}>{t("Повторить восстановление сессии")}</button>}
         </aside>
