@@ -71,8 +71,8 @@ try {
   assert.equal(await backendNode('console.log(process.getuid())'), '1000');
   assert.equal(await backendNode('console.log(process.env.PGHOST)'), 'postgres');
   assert.equal(await sql("SELECT current_setting('server_version_num')::int / 10000"), '17');
-  assert.equal(await sql('SELECT count(*) FROM workify.schema_migrations'), '4');
-  assert.equal(await sql("SELECT count(*) FROM information_schema.tables WHERE table_schema='workify' AND table_type='BASE TABLE'"), '30');
+  assert.equal(await sql('SELECT count(*) FROM workify.schema_migrations'), '8');
+  assert.equal(await sql("SELECT count(*) FROM information_schema.tables WHERE table_schema='workify' AND table_type='BASE TABLE'"), '32');
   assert.equal(await sql('SELECT count(*) FROM workify.categories'), '8');
   assert.equal(await sql('SELECT count(*) FROM workify.skills'), '20');
   await expectHealth(backend, 200, 'up');
@@ -89,7 +89,7 @@ try {
     console.log(result.stdout.trim());
   }
   const clientTests = await compose('run', '--rm', '--no-deps', '--volume', './frontend/test:/app/test:ro',
-    '--volume', './frontend/src/api.js:/app/src/api.js:ro', 'frontend', 'npm', 'test');
+    '--volume', './frontend/src:/app/src:ro', 'frontend', 'npm', 'test');
   console.log(clientTests.stdout.trim());
 
   const authHeaders = { 'Content-Type': 'application/json', 'X-Workify-Client': 'browser' };
@@ -218,7 +218,7 @@ try {
   const complaintResponse=await request(`${frontend}/api/orders/${agreement.id}/complaints`,{method:'POST',headers:authorHeaders,body:JSON.stringify({reason:'Проверка договорённостей',description:'Приватное обращение после завершения',fileIds:[evidence.id]})});assert.equal(complaintResponse.status,201);const complaint=(await complaintResponse.json()).complaint;assert.equal(complaint.target.id,account.user.id);
   assert.equal((await request(`${frontend}/api/orders/${agreement.id}/complaints`,{method:'POST',headers:authorHeaders,body:JSON.stringify({reason:'Повтор',description:'Вторая жалоба'})})).status,409);
   assert.equal((await request(`${frontend}/api/me/complaints/${complaint.id}`,{headers:authorization})).status,404);assert.equal((await request(`${frontend}/api/files/${evidence.id}`,{headers:authorization})).status,404);
-  console.log('PASS: immutable terminal-order complaint, server target, duplicate prevention and private evidence through the proxy');
+  console.log('PASS: terminal-order complaint with controlled editing before review, server target, duplicate prevention and private evidence through the proxy');
   await compose('exec', '-T', 'backend', 'node', 'src/commands/promote-admin.js', account.user.email);
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 200);
   const warningResponse=await request(`${frontend}/api/admin/users/${author.user.id}/warnings`,{method:'POST',headers:{...authHeaders,...authorization},body:JSON.stringify({message:'Соблюдайте правила общения'})});assert.equal(warningResponse.status,201);const warning=(await warningResponse.json()).warning;

@@ -8,6 +8,14 @@ import { createLocalStorage } from '../../src/storage/local-storage.js';
 import { createFileService } from '../../src/services/file.service.js';
 import { portfolioInput } from '../../src/validators/portfolio.js';
 
+test('file inspection recognizes legacy GIF and BMP formats by their actual signatures',async()=>{
+ const gif=Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7','base64');
+ const bmp=Buffer.alloc(58);bmp.write('BM');bmp.writeUInt32LE(58,2);bmp.writeUInt32LE(54,10);bmp.writeUInt32LE(40,14);bmp.writeInt32LE(1,18);bmp.writeInt32LE(1,22);bmp.writeUInt16LE(1,26);bmp.writeUInt16LE(24,28);bmp.writeUInt32LE(4,34);
+ assert.equal((await inspectFile({originalname:'image.gif',mimetype:'image/gif',buffer:gif})).mimeType,'image/gif');
+ assert.equal((await inspectFile({originalname:'image.bmp',mimetype:'image/bmp',buffer:bmp})).mimeType,'image/bmp');
+ await assert.rejects(inspectFile({originalname:'image.gif',mimetype:'image/gif',buffer:Buffer.from('not an image')}));
+});
+
 test('file inspection rejects MIME spoofing, executable names, traversal, empty and oversized files',async () => {
   for (const input of [
     { originalname:'x.png',mimetype:'image/png',buffer:Buffer.from('<html>fake</html>') },
