@@ -1,5 +1,6 @@
+import {createFileRepository} from './file.repository.js';
 import {createSourceRepository} from './source.repository.js';
-const columns=`r.id,r.order_id,r.author_id,r.recipient_id,r.rating,r.text,r.deleted_at,r.created_at,r.updated_at,o.title_snapshot,o.status AS order_status,o.customer_id,o.freelancer_id,
+const columns=`COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'originalName',f.original_name,'mimeType',f.mime_type,'sizeBytes',f.size_bytes) ORDER BY f.id) FROM workify.review_files rf JOIN workify.stored_files f ON f.id=rf.file_id WHERE rf.review_id=r.id AND f.deleted_at IS NULL),'[]'::jsonb) AS files,r.id,r.order_id,r.author_id,r.recipient_id,r.rating,r.text,r.deleted_at,r.created_at,r.updated_at,o.title_snapshot,o.status AS order_status,o.customer_id,o.freelancer_id,
   ap.first_name AS author_first_name,ap.last_name AS author_last_name,rp.first_name AS recipient_first_name,rp.last_name AS recipient_last_name`;
 const joins=`JOIN workify.orders o ON o.id=r.order_id JOIN workify.profiles ap ON ap.user_id=r.author_id JOIN workify.profiles rp ON rp.user_id=r.recipient_id`;
 const modes={customer:'customer_id',freelancer:'freelancer_id'};
@@ -16,7 +17,8 @@ export function createReviewRepository(database){
       COALESCE((SELECT jsonb_agg(page ORDER BY created_at DESC,id DESC) FROM page),'[]'::jsonb) AS items`,values)).rows[0];
   }
   return {
-    ...createSourceRepository(database),list,
+    ...createSourceRepository(database),list,files:createFileRepository(database),
+    async replaceFiles(id,ids){await database.query('DELETE FROM workify.review_files WHERE review_id=$1',[id]);await database.query('INSERT INTO workify.review_files(review_id,file_id) SELECT $1,unnest($2::uuid[])',[id,ids]);},
     async orderContext(id){return (await database.query('SELECT * FROM workify.orders WHERE id=$1',[id])).rows[0];},
     async lockOrder(id){return (await database.query('SELECT * FROM workify.orders WHERE id=$1 FOR UPDATE',[id])).rows[0];},
     async context(id){return (await database.query('SELECT r.id,r.author_id,r.order_id,o.project_id,o.customer_id,o.freelancer_id FROM workify.reviews r JOIN workify.orders o ON o.id=r.order_id WHERE r.id=$1',[id])).rows[0];},

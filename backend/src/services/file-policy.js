@@ -5,11 +5,11 @@ import { AppError } from '../utils/app-error.js';
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const fileTypes = Object.freeze({
-  '.png': ['image/png'], '.jpg': ['image/jpeg'], '.jpeg': ['image/jpeg'], '.webp': ['image/webp'],
+  '.gif': ['image/gif'], '.bmp': ['image/bmp','image/x-ms-bmp'], '.png': ['image/png'], '.jpg': ['image/jpeg'], '.jpeg': ['image/jpeg'], '.webp': ['image/webp'],
   '.pdf': ['application/pdf'], '.txt': ['text/plain'], '.zip': ['application/zip', 'application/x-zip-compressed'],
   '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'], '.mp4': ['video/mp4'],
 });
-const unsupported = () => new AppError(415, 'UNSUPPORTED_FILE_TYPE', 'Поддерживаются PNG, JPEG, WebP, PDF, TXT, DOCX, ZIP и MP4');
+const unsupported = () => new AppError(415, 'UNSUPPORTED_FILE_TYPE', 'Поддерживаются PNG, JPEG, GIF, BMP, WebP, PDF, TXT, DOCX, ZIP и MP4');
 export function validateFileHeader(file) {
   const name = file.originalname;
   if (typeof name !== 'string' || !name.trim() || name.length > 255 || /[/\\\u0000-\u001f\u007f]/.test(name) || name.includes('..')) {

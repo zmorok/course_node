@@ -1,7 +1,7 @@
 import { AppError } from '../utils/app-error.js';
 import { requireFileActor } from './file.service.js';
 const missing = () => new AppError(404,'PORTFOLIO_NOT_FOUND','Работа портфолио не найдена');
-const dto = row => ({ id: row.id, title: row.title, description: row.description, links: row.links,
+const dto = row => ({ id: row.id, title: row.title, experience: row.experience, skills: row.skills, description: row.description, links: row.links,
   files: row.files, createdAt: row.created_at, updatedAt: row.updated_at });
 export function createPortfolioService({ repository, transaction, fileService }) {
   return {
@@ -26,7 +26,7 @@ export function createPortfolioService({ repository, transaction, fileService })
         if (id) await repo.update(id,input);
         await repo.replaceFiles(itemId,input.fileIds);
         await files.markUnusedDeleted(previousIds.filter(fileId => !input.fileIds.includes(fileId)));
-        const changed=!previous||['title','description','links'].some(key=>JSON.stringify(previous[key])!==JSON.stringify(input[key]))||previousIds.length!==input.fileIds.length||input.fileIds.some(fileId=>!previousIds.includes(fileId));
+        const changed=!previous||['title','description','links','experience','skills'].some(key=>JSON.stringify(previous[key])!==JSON.stringify(input[key]))||previousIds.length!==input.fileIds.length||input.fileIds.some(fileId=>!previousIds.includes(fileId));
         if(changed)await repo.audit(actor.id,id?'PORTFOLIO_UPDATED':'PORTFOLIO_CREATED','portfolio',itemId,{fileCount:input.fileIds.length});
         return dto(await repo.find(itemId,actor.id));
       });

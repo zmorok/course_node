@@ -65,7 +65,7 @@ export function createFileService({ repository, transaction, storage, logger = c
         const previous = await repo.avatar(actor.id);
         if (id) {
           const [row] = await service.attachable(repo, actor.id, [id], previous ? [previous] : []);
-          if (!['image/jpeg', 'image/png', 'image/webp'].includes(row.mime_type)) throw new AppError(422, 'AVATAR_TYPE', 'Для аватара выберите PNG, JPEG или WebP');
+          if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/x-ms-bmp'].includes(row.mime_type)) throw new AppError(422, 'AVATAR_TYPE', 'Для аватара выберите PNG, JPEG, GIF, BMP или WebP');
         }
         await repo.setAvatar(actor.id, id);
         if (previous && previous !== id) await repo.markUnusedDeleted([previous]);
