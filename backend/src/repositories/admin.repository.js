@@ -1,10 +1,11 @@
+import {createAdminAccountsRepository} from './admin-accounts.repository.js';
 import {createSourceRepository} from './source.repository.js';
 import {createOrderRepository} from './order.repository.js';
 import {createOrderWorkRepository} from './order-work.repository.js';
 import {createComplaintRepository} from './complaint.repository.js';
 import {createWarningRepository} from './warning.repository.js';
 const userColumns=`u.id,u.email,u.username,u.role,CASE WHEN u.status='BLOCKED' AND (u.blocked_until IS NULL OR u.blocked_until>statement_timestamp()) THEN 'BLOCKED' ELSE 'ACTIVE' END AS status,
-  u.blocked_by,u.blocked_at,u.blocked_until,u.block_reason,u.last_unblocked_at,u.created_at,p.first_name,p.last_name,p.headline,p.phone`;
+  u.blocked_by,u.blocked_at,u.blocked_until,u.block_reason,u.last_unblocked_at,u.deleted_at,u.last_online_at,u.created_at,p.middle_name,p.gender,p.city,p.country,p.description,p.first_name,p.last_name,p.headline,p.phone`;
 const complaintColumns=`c.id,c.order_id,c.reporter_id,c.target_id,c.status,c.reason,c.assigned_admin_id,c.created_at,c.claimed_at,c.resolved_at,
   o.title_snapshot,o.project_id,ru.username AS reporter_username,tu.username AS target_username`;
 const complaintJoins=`JOIN workify.orders o ON o.id=c.order_id JOIN workify.projects p ON p.id=o.project_id JOIN workify.users ru ON ru.id=c.reporter_id JOIN workify.users tu ON tu.id=c.target_id`;
@@ -12,9 +13,9 @@ export function createAdminRepository(database){
   async function page(select,from,where,values,query,sort){values.push(query.pageSize,(query.page-1)*query.pageSize);return (await database.query(`WITH matches AS (SELECT ${select} FROM ${from}${where.length?` WHERE ${where.join(' AND ')}`:''}),
     page AS (SELECT * FROM matches ORDER BY ${sort} LIMIT $${values.length-1} OFFSET $${values.length}) SELECT (SELECT count(*) FROM matches)::int AS total,COALESCE((SELECT jsonb_agg(page ORDER BY ${sort}) FROM page),'[]'::jsonb) AS items`,values)).rows[0];}
   return {
-    ...createSourceRepository(database),orders:createOrderRepository(database),work:createOrderWorkRepository(database),complaints:createComplaintRepository(database),warnings:createWarningRepository(database),
-    async lockUsers(ids){return (await database.query('SELECT id,role,status,blocked_by,blocked_at,blocked_until,block_reason,last_unblocked_at FROM workify.users WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[[...new Set(ids)]])).rows;},
-    async users(query){const values=[],where=[],bind=value=>{values.push(value);return `$${values.length}`;};if(query.search)where.push(`strpos(lower(concat_ws(' ',u.username,u.email,p.first_name,p.last_name)),lower(${bind(query.search)}))>0`);if(query.role)where.push(`u.role=${bind(query.role)}`);if(query.status)where.push(`(CASE WHEN u.status='BLOCKED' AND (u.blocked_until IS NULL OR u.blocked_until>statement_timestamp()) THEN 'BLOCKED' ELSE 'ACTIVE' END)=${bind(query.status)}`);return page(userColumns,'workify.users u JOIN workify.profiles p ON p.user_id=u.id',where,values,query,query.sort==='name'?'lower(last_name),lower(first_name),id':'created_at DESC,id DESC');},
+    ...createSourceRepository(database),...createAdminAccountsRepository(database),orders:createOrderRepository(database),work:createOrderWorkRepository(database),complaints:createComplaintRepository(database),warnings:createWarningRepository(database),
+    async lockUsers(ids){return (await database.query('SELECT id,role,status,deleted_at,blocked_by,blocked_at,blocked_until,block_reason,last_unblocked_at FROM workify.users WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',[[...new Set(ids)]])).rows;},
+    async users(query){const values=[],where=['u.deleted_at IS NULL'],bind=value=>{values.push(value);return `$${values.length}`;};if(query.search)where.push(`strpos(lower(concat_ws(' ',u.username,u.email,p.first_name,p.last_name)),lower(${bind(query.search)}))>0`);if(query.role)where.push(`u.role=${bind(query.role)}`);if(query.status)where.push(`(CASE WHEN u.status='BLOCKED' AND (u.blocked_until IS NULL OR u.blocked_until>statement_timestamp()) THEN 'BLOCKED' ELSE 'ACTIVE' END)=${bind(query.status)}`);return page(userColumns,'workify.users u JOIN workify.profiles p ON p.user_id=u.id',where,values,query,query.sort==='name'?'lower(last_name),lower(first_name),id':'created_at DESC,id DESC');},
     async user(id){return (await database.query(`SELECT ${userColumns},r.customer_rating,r.freelancer_rating,r.customer_review_count,r.freelancer_review_count FROM workify.users u JOIN workify.profiles p ON p.user_id=u.id LEFT JOIN workify.v_user_ratings r ON r.user_id=u.id WHERE u.id=$1`,[id])).rows[0];},
     async sanctions(id,query){return page(`a.id,a.complaint_id,a.action_type,a.reason,a.created_at,a.expires_at,p.first_name,p.last_name,
       ((a.action_type='WARNING' OR a.created_at>COALESCE(u.last_unblocked_at,'-infinity'::timestamptz)) AND (a.expires_at IS NULL OR a.expires_at>statement_timestamp())) AS current`,
