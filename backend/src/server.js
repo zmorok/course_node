@@ -1,3 +1,5 @@
+import {createNotificationRepository} from './repositories/notification.repository.js';
+import {createNotificationService} from './services/notification.service.js';
 import { mkdir } from 'node:fs/promises';
 import { createApp } from './app.js';
 import { ConfigurationError, loadConfig } from './config/env.js';
@@ -73,8 +75,9 @@ try {
   const complaintService=createComplaintService({repository:createComplaintRepository(pool),fileService,transaction:operation=>withTransaction(pool,client=>operation(createComplaintRepository(client),createFileRepository(client)))});
   const warningService=createWarningService({repository:createWarningRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createWarningRepository(client)))});
   const adminService=createAdminService({repository:createAdminRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createAdminRepository(client)))});
+  const notificationService=createNotificationService({repository:createNotificationRepository(pool)});
   const auditService=createAuditService({repository:createAuditRepository(pool)});
-  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService, adminService, auditService });
+  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService, adminService, auditService, notificationService });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));
