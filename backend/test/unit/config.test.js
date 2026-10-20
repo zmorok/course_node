@@ -60,7 +60,7 @@ test('invalid startup exits before listening and does not print credentials', as
   const execute = promisify(execFile);
   const secret = 'startup-secret-must-not-appear';
   await assert.rejects(execute(process.execPath, [fileURLToPath(new URL('../../src/server.js', import.meta.url))], {
-    env: { ...process.env, PORT: 'invalid-port', PGPASSWORD: secret }, timeout: 5000,
+    env: { ...process.env, AUTH_JWT_SECRET: '0123456789abcdef'.repeat(4), PORT: 'invalid-port', PGPASSWORD: secret }, timeout: 5000,
   }), error => {
     assert.equal(error.code, 1);
     assert.match(error.stderr, /Invalid environment variables: PORT/);

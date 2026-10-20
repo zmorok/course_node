@@ -1,0 +1,23 @@
+import test,{after} from 'node:test';
+import assert from 'node:assert/strict';
+import {loadConfig} from '../../src/config/env.js';
+import {createDatabasePool} from '../../src/config/database.js';
+import {marketplace} from '../helpers/marketplace.js';
+if(process.env.WORKIFY_DB_TESTS!=='1')throw new Error('Use disposable infrastructure');
+const config=loadConfig({...process.env,NODE_ENV:'test'}),pool=createDatabasePool(config.database);after(()=>pool.end());
+const expect=(value,status)=>{assert.equal(value.response.status,status,JSON.stringify(value.body));return value.body;};
+const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6x2kAAAAASUVORK5CYII=','base64');
+test('review images publish only with a visible review and cannot attach another user file',async context=>{
+ const app=await marketplace(context,pool,config),a=await app.register(),b=await app.register(),order=await app.order(a,b);
+ expect(await app.api(a,`/orders/${order.id}/cancel`,'POST',{reason:'Остановили работу'}),200);
+ const form=new FormData();form.append('file',new Blob([png],{type:'image/png'}),'review.png');
+ const uploaded=expect(await app.request('/api/files',{method:'POST',headers:{Authorization:`Bearer ${a.token}`},body:form}),201).file;
+ expect(await app.request(`/api/files/${uploaded.id}`),404);
+ expect(await app.api(b,`/orders/${order.id}/reviews`,'POST',{rating:5,text:'Чужой файл',fileIds:[uploaded.id]}),404);
+ const review=expect(await app.api(a,`/orders/${order.id}/reviews`,'POST',{rating:5,text:'Отзыв с иллюстрацией',fileIds:[uploaded.id]}),201).review;
+ assert.equal(review.files[0].id,uploaded.id);assert.equal((await app.request(`/api/files/${uploaded.id}`)).response.status,200);
+ expect(await app.api(a,`/files/${uploaded.id}`,'DELETE'),409);
+ expect(await app.api(a,`/reviews/${review.id}`,'DELETE'),200);assert.equal((await app.request(`/api/files/${uploaded.id}`)).response.status,404);
+ expect(await app.api(a,`/reviews/${review.id}/restore`,'POST',{}),200);assert.equal((await app.request(`/api/files/${uploaded.id}`)).response.status,200);
+ const updated=expect(await app.api(a,`/reviews/${review.id}`,'PUT',{rating:4,text:'Без картинки',fileIds:[]}),200).review;assert.deepEqual(updated.files,[]);assert.equal((await app.request(`/api/files/${uploaded.id}`)).response.status,404);
+});
