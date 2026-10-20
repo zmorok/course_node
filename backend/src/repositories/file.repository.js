@@ -33,7 +33,12 @@ export function createFileRepository(database) {
         OR EXISTS (SELECT 1 FROM workify.order_files ofile JOIN workify.orders o ON o.id=ofile.order_id
           WHERE ofile.file_id=f.id AND $2::uuid IN (o.customer_id,o.freelancer_id))
         OR EXISTS (SELECT 1 FROM workify.submission_files sf JOIN workify.order_submissions s ON s.id=sf.submission_id
-          JOIN workify.orders o ON o.id=s.order_id WHERE sf.file_id=f.id AND $2::uuid IN (o.customer_id,o.freelancer_id)))`, [id, actorId ?? null])).rows[0];
+          JOIN workify.orders o ON o.id=s.order_id WHERE sf.file_id=f.id AND $2::uuid IN (o.customer_id,o.freelancer_id))
+        OR EXISTS (SELECT 1 FROM workify.users admin WHERE admin.id=$2::uuid AND admin.role='ADMIN' AND (admin.status='ACTIVE' OR admin.blocked_until<=statement_timestamp())
+          AND (EXISTS(SELECT 1 FROM workify.complaint_files cf WHERE cf.file_id=f.id)
+            OR EXISTS(SELECT 1 FROM workify.order_files ofile JOIN workify.complaints c ON c.order_id=ofile.order_id WHERE ofile.file_id=f.id)
+            OR EXISTS(SELECT 1 FROM workify.submission_files sf JOIN workify.order_submissions s ON s.id=sf.submission_id JOIN workify.complaints c ON c.order_id=s.order_id WHERE sf.file_id=f.id)
+            OR EXISTS(SELECT 1 FROM workify.project_files pf JOIN workify.orders o ON o.project_id=pf.project_id JOIN workify.complaints c ON c.order_id=o.id WHERE pf.file_id=f.id))))`, [id, actorId ?? null])).rows[0];
     },
     async markUnusedDeleted(ids) {
       await database.query(`UPDATE workify.stored_files f SET deleted_at=clock_timestamp()

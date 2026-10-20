@@ -12,8 +12,9 @@ import {createOrderRouter} from './order.routes.js';
 import {createReviewRouter} from './review.routes.js';
 import {createComplaintRouter} from './complaint.routes.js';
 import {createWarningRouter} from './warning.routes.js';
+import {createAdminRouter} from './admin.routes.js';
 
-export function createApiRouter({ healthService, authService, authConfig, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService }) {
+export function createApiRouter({ healthService, authService, authConfig, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService, adminService }) {
   const router = Router();
   router.use(createHealthRouter(healthService));
   if (authService) router.use(createAuthRouter(authService, authConfig));
@@ -28,5 +29,6 @@ export function createApiRouter({ healthService, authService, authConfig, profil
   if(reviewService)router.use(createReviewRouter(reviewService,authService));
   if(complaintService)router.use(createComplaintRouter(complaintService,authService));
   if(warningService)router.use(createWarningRouter(warningService,authService));
+  if(adminService)router.use(createAdminRouter(adminService,authService));
   return router;
 }

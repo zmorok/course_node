@@ -1,0 +1,25 @@
+import {Router} from 'express';
+import {rateLimit} from 'express-rate-limit';
+import {authMiddleware,roleMiddleware} from '../middleware/auth.js';
+import {validate} from '../middleware/validate.js';
+import {asyncHandler} from '../utils/async-handler.js';
+import {AppError} from '../utils/app-error.js';
+import {profileParams} from '../validators/profile.js';
+import {complaintParams} from '../validators/complaints.js';
+import {orderDetailQuery} from '../validators/orders.js';
+import {emptyCommand} from '../validators/projects.js';
+import {workQuery} from '../validators/order-work.js';
+import {adminUserQuery,adminComplaintQuery,adminBlock,adminUnblock,adminReject,adminResolve,adminContextParams} from '../validators/admin.js';
+import {createAdminController} from '../controllers/admin.controller.js';
+export function createAdminRouter(service,authService){const router=Router(),c=createAdminController(service),auth=[authMiddleware(authService),roleMiddleware('ADMIN')];
+  const writes=rateLimit({windowMs:15*60*1000,limit:60,standardHeaders:'draft-8',legacyHeaders:false,handler:(_req,_res,next)=>next(new AppError(429,'RATE_LIMITED','Слишком много решений. Повторите позже'))});
+  router.get('/admin/users',...auth,validate(adminUserQuery,'query'),asyncHandler(c.users));
+  router.get('/admin/users/:userId',...auth,validate(profileParams,'params'),validate(orderDetailQuery,'query'),asyncHandler(c.user));
+  router.get('/admin/users/:userId/sanctions',...auth,validate(profileParams,'params'),validate(workQuery,'query'),asyncHandler(c.sanctions));
+  for(const [command,rule] of [['block',adminBlock],['unblock',adminUnblock]])router.post(`/admin/users/:userId/${command}`,...auth,writes,validate(profileParams,'params'),validate(orderDetailQuery,'query'),validate(rule),asyncHandler(c[command]));
+  router.get('/admin/complaints',...auth,validate(adminComplaintQuery,'query'),asyncHandler(c.queue));
+  router.get('/admin/complaints/:complaintId',...auth,validate(complaintParams,'params'),validate(orderDetailQuery,'query'),asyncHandler(c.detail));
+  for(const [command,rule] of [['claim',emptyCommand],['reject',adminReject],['resolve',adminResolve]])router.post(`/admin/complaints/:complaintId/${command}`,...auth,writes,validate(complaintParams,'params'),validate(orderDetailQuery,'query'),validate(rule),asyncHandler(c[command]));
+  router.get('/admin/complaints/:complaintId/:section',...auth,validate(adminContextParams,'params'),validate(workQuery,'query'),asyncHandler(c.context));
+  return router;
+}

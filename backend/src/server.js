@@ -36,6 +36,8 @@ import {createComplaintRepository} from './repositories/complaint.repository.js'
 import {createComplaintService} from './services/complaint.service.js';
 import {createWarningRepository} from './repositories/warning.repository.js';
 import {createWarningService} from './services/warning.service.js';
+import {createAdminRepository} from './repositories/admin.repository.js';
+import {createAdminService} from './services/admin.service.js';
 
 let pool;
 try {
@@ -68,7 +70,8 @@ try {
   const reviewService=createReviewService({repository:createReviewRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createReviewRepository(client)))});
   const complaintService=createComplaintService({repository:createComplaintRepository(pool),fileService,transaction:operation=>withTransaction(pool,client=>operation(createComplaintRepository(client),createFileRepository(client)))});
   const warningService=createWarningService({repository:createWarningRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createWarningRepository(client)))});
-  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService });
+  const adminService=createAdminService({repository:createAdminRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createAdminRepository(client)))});
+  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService, adminService });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));
