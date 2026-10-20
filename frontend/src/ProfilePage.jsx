@@ -63,7 +63,7 @@ export function ProfilePage({ user, onUserChange }) {
   const skillsDirty = !sameIds(selected, savedIds);
   const emailChanged = draft.email.toLowerCase().trim() !== profile.email.toLowerCase();
   const busy = saving || savingSkills;
-  const filtered = catalog.filter((skill) => `${skill.name} ${skill.slug}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const filtered = catalog.filter((skill) => `${t(skill.name)} ${skill.slug}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   const fieldHasProblem = (name) => Boolean(profileError?.details?.some((item) => item.field === `body.${name}`));
   async function saveProfile(event) {
     event.preventDefault();setSaving(true);setProfileError(null);setMessage('');
@@ -129,7 +129,7 @@ export function ProfilePage({ user, onUserChange }) {
             <div className="field skill-search"><label htmlFor="skill-search">{t("Найти навык")}</label><input id="skill-search" type="search" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
             <div className="skill-options">{filtered.map((skill) => <label className={selected.includes(skill.id) ? 'skill-option selected' : 'skill-option'} key={skill.id}>
               <input type="checkbox" checked={selected.includes(skill.id)} disabled={selected.length >= 50 && !selected.includes(skill.id)}
-                  onChange={(event) => {const checked = event.target.checked;setSelected((previous) => checked ? [...previous, skill.id] : previous.filter((id) => id !== skill.id));setSkillsMessage('');}} />{skill.name}</label>)}</div>
+                  onChange={(event) => {const checked = event.target.checked;setSelected((previous) => checked ? [...previous, skill.id] : previous.filter((id) => id !== skill.id));setSkillsMessage('');}} />{t(skill.name)}</label>)}</div>
             {!filtered.length && <p className="profile-help">{t("Навыки не найдены. Попробуйте другое название.")}</p>}
             <div className="profile-form-actions"><button type="submit" disabled={!skillsDirty}>{savingSkills ? t("Сохраняем…") : t("Сохранить навыки")}</button>
               <button type="button" className="secondary" disabled={!skillsDirty} onClick={() => {setSelected(savedIds);setSkillsError(null);setSkillsMessage('');}}>{t("Отменить выбор")}</button></div>
@@ -140,7 +140,7 @@ export function ProfilePage({ user, onUserChange }) {
       <aside className="profile-card profile-summary" aria-label={t("Сохранённые данные профиля")}>
         <ProfileIdentity profile={profile}><span className="role-badge">{isClient ? t("Клиент") : t("Администратор")}</span></ProfileIdentity>
         {isClient && <AvatarEditor fileId={profile.avatarFileId} onChange={(avatarFileId) => setProfile((previous) => ({ ...previous, avatarFileId }))} />}
-        {isClient && <><div className="profile-tags">{profile.skills.map((skill) => <span key={skill.id}>{skill.name}</span>)}</div>
+        {isClient && <><div className="profile-tags">{profile.skills.map((skill) => <span key={skill.id}>{t(skill.name)}</span>)}</div>
           <a className="profile-public-link text-link" href={`/users/${user.id}`} target="_blank" rel="noopener noreferrer">{t("Открыть публичный профиль ↗")}</a>
           <p className="profile-help">{t("Так ваши сохранённые данные увидят другие пользователи.")}</p></>}
       </aside>
@@ -163,6 +163,6 @@ export function PublicProfilePage({ userId, user }) {
       <div className="profile-ratings"><div><strong>{profile.customerRating ?? '—'}</strong><span>{t("Как заказчик")}</span><small>{t("Отзывов: ")}{profile.customerReviewCount}</small></div>
         <div><strong>{profile.freelancerRating ?? '—'}</strong><span>{t("Как исполнитель")}</span><small>{t("Отзывов: ")}{profile.freelancerReviewCount}</small></div></div></section>
       <div className="profile-editor"><section className="profile-card"><h2>{t("О себе")}</h2><p className="public-description">{profile.description || t("Пользователь пока не добавил описание.")}</p></section>
-        <section className="profile-card"><h2>{t("Навыки")}</h2>{profile.skills.length ? <div className="profile-tags">{profile.skills.map((skill) => <span key={skill.id}>{skill.name}</span>)}</div> : <p className="profile-help">{t("Навыки пока не указаны.")}</p>}</section><PublicReviews key={userId} userId={userId} /><InvitationComposer key={`${profile.id}-${user?.id ?? 'guest'}`} profile={profile} user={user} /><PortfolioPanel userId={userId} /></div></div>
+        <section className="profile-card"><h2>{t("Навыки")}</h2>{profile.skills.length ? <div className="profile-tags">{profile.skills.map((skill) => <span key={skill.id}>{t(skill.name)}</span>)}</div> : <p className="profile-help">{t("Навыки пока не указаны.")}</p>}</section><PublicReviews key={userId} userId={userId} /><InvitationComposer key={`${profile.id}-${user?.id ?? 'guest'}`} profile={profile} user={user} /><PortfolioPanel userId={userId} /></div></div>
   </>;
 }

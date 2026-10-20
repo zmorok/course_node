@@ -45,7 +45,7 @@ async function testMigrationRecovery() {
     'workify_failed_migration'), '0');
   assert.equal(await query('SELECT count(*) FROM workify.categories', 'workify_failed_migration'), '0');
   await migrate('workify_failed_migration');
-  assert.equal(await query('SELECT count(*) FROM workify.schema_migrations', 'workify_failed_migration'), '4');
+  assert.equal(await query('SELECT count(*) FROM workify.schema_migrations', 'workify_failed_migration'), '8');
   console.log('PASS: failed migration rolls back its DDL and ledger; corrected migration resumes');
 }
 
@@ -120,9 +120,9 @@ try {
   const ledger = await query('SELECT jsonb_agg(to_jsonb(m) ORDER BY version) FROM workify.schema_migrations m');
   await migrate();
   assert.equal(await query('SELECT jsonb_agg(to_jsonb(m) ORDER BY version) FROM workify.schema_migrations m'), ledger);
-  assert.equal(await query('SELECT count(*) FROM workify.schema_migrations'), '4');
-  assert.equal(await query("SELECT count(*) FROM information_schema.tables WHERE table_schema='workify' AND table_type='BASE TABLE'"), '30');
-  console.log('PASS: clean install and repeated migration run (27 domain tables + 2 auth tables + migration ledger)');
+  assert.equal(await query('SELECT count(*) FROM workify.schema_migrations'), '8');
+  assert.equal(await query("SELECT count(*) FROM information_schema.tables WHERE table_schema='workify' AND table_type='BASE TABLE'"), '32');
+  console.log('PASS: clean install and repeated migration run (29 domain tables + 2 auth tables + migration ledger)');
   for (const file of ['constraints.sql', 'views_and_seed.sql']) {
     const result = await psql(['-f', `/tmp/database/tests/${file}`]);
     console.log(result.stdout.trim());
