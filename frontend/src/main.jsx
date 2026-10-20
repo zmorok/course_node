@@ -1,3 +1,4 @@
+import { Link, useLocation, RouteFocus } from './Navigation.jsx';
 import { t, locale } from "./i18n.js";import { Preferences } from './Preferences.jsx';
 import { SiteNavigation } from './SiteNavigation.jsx';
 import { NotificationsPage } from './Notifications.jsx';
@@ -18,9 +19,10 @@ import { AdminPage } from './AdminPage.jsx';
 import { AuditPage } from './AuditPage.jsx';
 
 function App() {
+  const location = useLocation();
   const [user, setUser] = useState(null);
   const [restoring, setRestoring] = useState(true);
-  const [notice, setNotice] = useState(new URLSearchParams(window.location.search).has('passwordChanged') ? t("Пароль изменён. Войдите с новым паролем.") : '');
+  const [notice, setNotice] = useState(new URLSearchParams(location.search).has('passwordChanged') ? t("Пароль изменён. Войдите с новым паролем.") : '');
   const [restoreFailed, setRestoreFailed] = useState(false);
   async function restore() {
     setRestoring(true);setRestoreFailed(false);setNotice('');
@@ -59,34 +61,34 @@ function App() {
   }, [checkConnection]);
 
   const labels = { checking: t("Проверяем подключение…"), ready: t("Подключение установлено"), unavailable: t("Сервис временно недоступен") };
-  const publicMatch = /^\/users\/([^/]+)\/?$/.exec(window.location.pathname);
-  const ownProfile = /^\/me\/profile\/?$/.test(window.location.pathname);
-  const catalog = /^\/projects\/?$/.test(window.location.pathname);
-  const ownProjects = /^\/me\/projects\/?$/.test(window.location.pathname);
-  const ownProposals = /^\/me\/proposals\/?$/.test(window.location.pathname);
-  const freelancers = /^\/freelancers\/?$/.test(window.location.pathname);
-  const ownInvitations = /^\/me\/invitations\/?$/.test(window.location.pathname);
-  const ownOrders = /^\/me\/orders\/?$/.test(window.location.pathname);
-  const ownReviews = /^\/me\/reviews\/?$/.test(window.location.pathname);
-  const ownComplaints = /^\/me\/complaints\/?$/.test(window.location.pathname);
-  const complaintMatch = /^\/me\/complaints\/([^/]+)\/?$/.exec(window.location.pathname);
-  const ownWarnings = /^\/me\/warnings\/?$/.test(window.location.pathname);
-  const ownNotifications = /^\/me\/notifications\/?$/.test(window.location.pathname);
-  const adminView = /^\/admin(?:\/|$)/.test(window.location.pathname);
-  const orderMatch = /^\/orders\/([^/]+)\/?$/.exec(window.location.pathname);
-  const newProject = /^\/projects\/new\/?$/.test(window.location.pathname);
-  const projectMatch = !newProject && /^\/projects\/([^/]+)(\/edit)?\/?$/.exec(window.location.pathname);
+  const publicMatch = /^\/users\/([^/]+)\/?$/.exec(location.pathname);
+  const ownProfile = /^\/me\/profile\/?$/.test(location.pathname);
+  const catalog = /^\/projects\/?$/.test(location.pathname);
+  const ownProjects = /^\/me\/projects\/?$/.test(location.pathname);
+  const ownProposals = /^\/me\/proposals\/?$/.test(location.pathname);
+  const freelancers = /^\/freelancers\/?$/.test(location.pathname);
+  const ownInvitations = /^\/me\/invitations\/?$/.test(location.pathname);
+  const ownOrders = /^\/me\/orders\/?$/.test(location.pathname);
+  const ownReviews = /^\/me\/reviews\/?$/.test(location.pathname);
+  const ownComplaints = /^\/me\/complaints\/?$/.test(location.pathname);
+  const complaintMatch = /^\/me\/complaints\/([^/]+)\/?$/.exec(location.pathname);
+  const ownWarnings = /^\/me\/warnings\/?$/.test(location.pathname);
+  const ownNotifications = /^\/me\/notifications\/?$/.test(location.pathname);
+  const adminView = /^\/admin(?:\/|$)/.test(location.pathname);
+  const orderMatch = /^\/orders\/([^/]+)\/?$/.exec(location.pathname);
+  const newProject = /^\/projects\/new\/?$/.test(location.pathname);
+  const projectMatch = !newProject && /^\/projects\/([^/]+)(\/edit)?\/?$/.exec(location.pathname);
   const projectView = Boolean(catalog || freelancers || projectMatch && (!projectMatch[2] || user) || (newProject || ownProjects || ownProposals || ownInvitations || ownOrders || ownReviews || ownComplaints || complaintMatch || ownWarnings || ownNotifications || adminView || orderMatch) && user);
   const profileView = Boolean(publicMatch || ownProfile && user || projectView);
   return (
     <div className={profileView ? 'page profile-page' : 'page'}>
-      <a className="skip-link" href="#main-content">{t("К содержимому")}</a>
+      <Link className="skip-link" href="#main-content">{t("К содержимому")}</Link>
       <header className="header">
-        <a className="brand" href="/" aria-label={t("Workify — главная")}><span className="brand-mark">w.</span>workify</a>
+        <Link className="brand" href="/" aria-label={t("Workify — главная")}><span className="brand-mark">w.</span>workify</Link>
         <SiteNavigation user={user} /><Preferences />
       </header>
-      <main id="main-content" tabIndex={-1} className={profileView ? 'profile-main' : undefined}>
-        {projectView && restoring ? <div className="profile-card" role="status">{t("Загружаем рабочее пространство…")}</div> :
+      <RouteFocus /><main id="main-content" tabIndex={-1} className={profileView ? 'profile-main' : undefined}>
+        <React.Fragment key={`${location.pathname}${location.search}:${user?.id ?? 'guest'}`} >{projectView && restoring ? <div className="profile-card" role="status">{t("Загружаем рабочее пространство…")}</div> :
         catalog ? <ProjectListPage user={user} /> :
         freelancers ? <FreelancerPage /> :
         ownProjects && user ? <ProjectListPage user={user} mine /> :
@@ -97,7 +99,7 @@ function App() {
         (ownComplaints || complaintMatch) && user ? <ComplaintsPage key={user.id} user={user} complaintId={complaintMatch?.[1]} /> :
         ownNotifications && user ? <NotificationsPage key={user.id} /> :
         ownWarnings && user ? <WarningsPage key={user.id} user={user} /> :
-        /^\/admin\/audit\/?$/.test(window.location.pathname) && user ? <AuditPage key={user.id} user={user} /> :
+        /^\/admin\/audit\/?$/.test(location.pathname) && user ? <AuditPage key={user.id} user={user} /> :
         adminView && user ? <AdminPage key={user.id} user={user} /> :
         orderMatch && user ? <OrderDetailsPage key={user.id} user={user} orderId={orderMatch[1]} /> :
         newProject && user ? <ProjectEditorPage user={user} /> :
@@ -117,11 +119,11 @@ function App() {
           {user ? <AccountPanel user={user} onLogout={logout}
             onRefresh={async () => {const result = await api('/auth/me');setUser(result.user);return t("Данные аккаунта обновлены");}}
             onAdminCheck={async () => {await api('/admin/access');return t("Доступ администратора подтверждён");}} /> :
-            <AuthPanel restoring={restoring} notice={notice} onAuthenticate={async (mode, values) => {setUser(await authenticate(mode, values));setNotice('');setRestoreFailed(false);}} />}
+            <AuthPanel restoring={restoring} notice={new URLSearchParams(location.search).has('passwordChanged') ? t("Пароль изменён. Войдите с новым паролем.") : notice} onAuthenticate={async (mode, values) => {setUser(await authenticate(mode, values));setNotice('');setRestoreFailed(false);}} />}
           {restoreFailed && !restoring && !user && <button className="restore-button secondary" onClick={restore}>{t("Повторить восстановление сессии")}</button>}
         </aside>
         </>}
-      </main>
+      </React.Fragment></main>
       <footer><span>Workify</span><span>{t("Для работы, у которой есть результат.")}</span></footer>
     </div>);
 

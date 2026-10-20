@@ -1,3 +1,4 @@
+import { Link } from './Navigation.jsx';
 import { t, locale } from "./i18n.js";import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { InvitationComposer } from './InvitationPages.jsx';
@@ -90,7 +91,7 @@ export function ProfilePage({ user, onUserChange }) {
   return <>
     <div className="profile-page-heading"><div><p className="eyebrow">{t("Ваше рабочее пространство")}</p><h1>{isClient ? t("Мой профиль") : t("Профиль аккаунта")}</h1>
       <p className="profile-subtitle">{isClient ? t("Расскажите о себе и выберите навыки для будущих проектов.") : t("Ваши персональные и контактные данные.")}</p></div>
-      <a className="text-link" href="/">{t("← К аккаунту")}</a></div>
+      <Link className="text-link" href="/">{t("← К аккаунту")}</Link></div>
     <div className="profile-layout">
       <div className="profile-editor">
         <section className="profile-card" aria-labelledby="profile-data-title">
@@ -141,7 +142,7 @@ export function ProfilePage({ user, onUserChange }) {
         <ProfileIdentity profile={profile}><span className="role-badge">{isClient ? t("Клиент") : t("Администратор")}</span></ProfileIdentity>
         {isClient && <AvatarEditor fileId={profile.avatarFileId} onChange={(avatarFileId) => setProfile((previous) => ({ ...previous, avatarFileId }))} />}
         {isClient && <><div className="profile-tags">{profile.skills.map((skill) => <span key={skill.id}>{t(skill.name)}</span>)}</div>
-          <a className="profile-public-link text-link" href={`/users/${user.id}`} target="_blank" rel="noopener noreferrer">{t("Открыть публичный профиль ↗")}</a>
+          <Link className="profile-public-link text-link" href={`/users/${user.id}`} target="_blank" rel="noopener noreferrer">{t("Открыть публичный профиль ↗")}</Link>
           <p className="profile-help">{t("Так ваши сохранённые данные увидят другие пользователи.")}</p></>}
       </aside>
     </div>
@@ -156,9 +157,9 @@ export function PublicProfilePage({ userId, user }) {
     return () => {active = false;};
   }, [userId, attempt]);
   if (error) return <section className="profile-card"><h1>{t("Не удалось открыть профиль")}</h1><Problems problem={error} />
-    {error.status !== 404 && <button onClick={() => setAttempt((value) => value + 1)}>{t("Повторить")}</button>}<a className="text-link" href="/">{t("На главную")}</a></section>;
+    {error.status !== 404 && <button onClick={() => setAttempt((value) => value + 1)}>{t("Повторить")}</button>}<Link className="text-link" href="/">{t("На главную")}</Link></section>;
   if (!profile) return <div className="profile-card" role="status">{t("Загружаем профиль…")}</div>;
-  return <><div className="profile-page-heading"><div><p className="eyebrow">{t("Люди Workify")}</p><h1>{t("Профиль клиента")}</h1></div><a className="text-link" href="/">{t("← На главную")}</a></div>
+  return <><div className="profile-page-heading"><div><p className="eyebrow">{t("Люди Workify")}</p><h1>{t("Профиль клиента")}</h1></div><Link className="text-link" href="/">{t("← На главную")}</Link></div>
     <div className="public-profile-layout"><section className="profile-card public-profile-identity"><ProfileIdentity profile={profile} />
       <div className="profile-ratings"><div><strong>{profile.customerRating ?? '—'}</strong><span>{t("Как заказчик")}</span><small>{t("Отзывов: ")}{profile.customerReviewCount}</small></div>
         <div><strong>{profile.freelancerRating ?? '—'}</strong><span>{t("Как исполнитель")}</span><small>{t("Отзывов: ")}{profile.freelancerReviewCount}</small></div></div></section>

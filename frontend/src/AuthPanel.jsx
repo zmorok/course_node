@@ -1,3 +1,4 @@
+import { Link } from './Navigation.jsx';
 import { t, locale } from "./i18n.js";import React, { useState } from 'react';
 import { ErrorMessage } from './Ui.jsx';
 
@@ -87,11 +88,11 @@ export function AccountPanel({ user, onLogout, onRefresh, onAdminCheck }) {
     <p className="account-username">@{user.username}</p><p className="account-email">{user.email}</p>
     <div className="account-info">{user.role === 'ADMIN' ? t("Рассматривайте жалобы, изучайте историю заказов и управляйте ограничениями клиентов.") : t("Вы можете быть заказчиком и исполнителем. Заполните профиль и укажите свои навыки.")}</div>
     <div className="account-actions">
-      <a className="button-link" href="/me/profile">{t("Мой профиль")}<span aria-hidden="true">↗</span></a>
-      {user.role === 'CLIENT' && <a className="button-link" href="/me/projects">{t("Мои проекты")}<span aria-hidden="true">↗</span></a>}
-      {user.role === 'CLIENT' && <a className="button-link" href="/me/orders">{t("Мои заказы")}<span aria-hidden="true">↗</span></a>}
+      <Link className="button-link" href="/me/profile">{t("Мой профиль")}<span aria-hidden="true">↗</span></Link>
+      {user.role === 'CLIENT' && <Link className="button-link" href="/me/projects">{t("Мои проекты")}<span aria-hidden="true">↗</span></Link>}
+      {user.role === 'CLIENT' && <Link className="button-link" href="/me/orders">{t("Мои заказы")}<span aria-hidden="true">↗</span></Link>}
       <button type="button" disabled={busy} onClick={() => run(onRefresh)}>{t("Обновить данные")}<span aria-hidden="true">↻</span></button>
-      {user.role === 'ADMIN' && <a className="button-link" href="/admin/complaints">{t("Административная панель")}<span aria-hidden="true">↗</span></a>}
+      {user.role === 'ADMIN' && <Link className="button-link" href="/admin/complaints">{t("Административная панель")}<span aria-hidden="true">↗</span></Link>}
       {user.role === 'ADMIN' && <button type="button" disabled={busy} onClick={() => run(onAdminCheck)}>{t("Проверить доступ администратора")}</button>}
       <button type="button" className="secondary" disabled={busy} onClick={() => run(onLogout)}>{t("Выйти из аккаунта")}</button>
     </div>

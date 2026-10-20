@@ -1,3 +1,5 @@
+import { getLocation } from './navigation.js';
+import { Link } from './Navigation.jsx';
 import { t, locale } from "./i18n.js";import { ErrorMessage } from './Ui.jsx';
 import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
@@ -13,7 +15,7 @@ export function InvitationComposer({ profile, user }) {
   const [draft, setDraft] = useState({ projectId: '', message: '', offeredPrice: '', offeredDeadlineAt: '', expiresAt: '' });
   const eligible = user?.role === 'CLIENT' && user.id !== profile.id;
   useEffect(() => {if (!eligible) return;let active = true;setLoading(true);setLoadError(null);api(`/freelancers/${profile.id}/projects`).then((result) => {if (active) setProjects(result.projects);}).catch((problem) => {if (active) setLoadError(problem);}).finally(() => {if (active) setLoading(false);});return () => {active = false;};}, [profile.id, user?.id, eligible, attempt]);
-  if (!user) return <section className="profile-card"><h2>{t("Предложите совместную работу")}</h2><p className="profile-help">{t("Войдите, чтобы пригласить специалиста в свой открытый проект.")}</p><a className="text-link" href="/">{t("Войти в аккаунт ↗")}</a></section>;
+  if (!user) return <section className="profile-card"><h2>{t("Предложите совместную работу")}</h2><p className="profile-help">{t("Войдите, чтобы пригласить специалиста в свой открытый проект.")}</p><Link className="text-link" href="/">{t("Войти в аккаунт ↗")}</Link></section>;
   if (!eligible) return null;
   async function send(event) {event.preventDefault();if (!Number.isFinite(new Date(draft.offeredDeadlineAt).getTime()) || draft.expiresAt && !Number.isFinite(new Date(draft.expiresAt).getTime())) {setError({ message: t("Укажите корректные дату и время.") });return;}
     setBusy(true);setError(null);try {await api(`/projects/${draft.projectId}/invitations`, { method: 'POST', body: { freelancerId: profile.id, message: draft.message, offeredPrice: draft.offeredPrice || null, offeredDeadlineAt: new Date(draft.offeredDeadlineAt).toISOString(), expiresAt: draft.expiresAt ? new Date(draft.expiresAt).toISOString() : null } });setSent(true);setAttempt((value) => value + 1);setDraft({ ...draft, projectId: '', message: '', offeredPrice: '', offeredDeadlineAt: '', expiresAt: '' });} catch (problem) {setError(problem);} finally {setBusy(false);}}
@@ -28,7 +30,7 @@ export function InvitationComposer({ profile, user }) {
       <div className="field"><label htmlFor="invitation-expires">{t("Ответить до (необязательно)")}</label><input id="invitation-expires" type="datetime-local" value={draft.expiresAt} onChange={(event) => setDraft({ ...draft, expiresAt: event.target.value })} /><small>{t("Оставьте пустым, чтобы не ограничивать время ответа отдельно.")}</small></div></div>
       <button type="submit">{busy ? t("Отправляем…") : t("Отправить приглашение ↗")}</button>
     </fieldset></form> : <p className="portfolio-empty">{t("Нет доступных проектов: опубликуйте задание или дождитесь ответа на уже отправленное приглашение.")}</p>}
-    <ErrorMessage error={error} /><div className="proposal-actions"><a className="text-link" href="/me/invitations?box=sent">{t("Отправленные приглашения ↗")}</a><a className="text-link" href="/projects/new">{t("Создать проект ↗")}</a></div>
+    <ErrorMessage error={error} /><div className="proposal-actions"><Link className="text-link" href="/me/invitations?box=sent">{t("Отправленные приглашения ↗")}</Link><Link className="text-link" href="/projects/new">{t("Создать проект ↗")}</Link></div>
   </section>;
 }
 
@@ -36,7 +38,7 @@ function InvitationCard({ invitation, onChange }) {
   const [action, setAction] = useState(null),[reason, setReason] = useState(''),[busy, setBusy] = useState(false),[error, setError] = useState(null);
   async function decide(event) {event.preventDefault();setBusy(true);setError(null);try {const result = await api(`/invitations/${invitation.id}/${action}`, { method: 'POST', body: action === 'decline' && reason.trim() ? { reason } : {} });setAction(null);onChange(result.invitation);} catch (problem) {setError(problem);} finally {setBusy(false);}}
   return <article className="proposal-card"><div className="project-card-top"><span className={`project-status status-${invitation.status.toLowerCase()}`}>{invitation.expired ? t("Срок истёк") : statuses[invitation.status]}</span><span className="proposal-created">{date(invitation.createdAt)}</span></div>
-    <h3>{invitation.project.status === 'OPEN' ? <a className="text-link" href={`/projects/${invitation.project.id}`}>{invitation.project.title}</a> : invitation.project.title}</h3><p className="proposal-parties"><a href={`/users/${invitation.customer.id}`}>{invitation.customer.firstName} {invitation.customer.lastName}</a><span> → </span><a href={`/users/${invitation.freelancer.id}`}>{invitation.freelancer.firstName} {invitation.freelancer.lastName}</a></p>
+    <h3>{invitation.project.status === 'OPEN' ? <Link className="text-link" href={`/projects/${invitation.project.id}`}>{invitation.project.title}</Link> : invitation.project.title}</h3><p className="proposal-parties"><Link href={`/users/${invitation.customer.id}`}>{invitation.customer.firstName} {invitation.customer.lastName}</Link><span> → </span><Link href={`/users/${invitation.freelancer.id}`}>{invitation.freelancer.firstName} {invitation.freelancer.lastName}</Link></p>
     <p className="public-description">{invitation.message}</p><dl className="proposal-terms"><div><dt>{t("Предложенная цена")}</dt><dd>{price(invitation.offeredPrice)}</dd></div><div><dt>{t("Срок работы")}</dt><dd>{date(invitation.offeredDeadlineAt)}</dd></div><div><dt>{t("Срок ответа")}</dt><dd>{date(invitation.expiresAt)}</dd></div></dl>
     {invitation.closureReason && <p className="proposal-reason">{reasons[invitation.closureReason] ?? invitation.closureReason}</p>}{invitation.expired && <p className="profile-help">{t("Срок истёк. Для начала работы потребуется новое приглашение.")}</p>}{invitation.order && <Agreement order={invitation.order} />}
     {!action && invitation.canRespond && <div className="proposal-actions"><button onClick={() => {setAction('accept');setError(null);}}>{t("Принять приглашение ↗")}</button><button className="secondary" onClick={() => {setAction('decline');setError(null);}}>{t("Отклонить приглашение")}</button></div>}
@@ -58,8 +60,8 @@ export function InvitationList({ path, revision }) {
   </div>;
 }
 export function OwnInvitationsPage({ user }) {
-  if (user.role !== 'CLIENT') return <section className="profile-card"><h1>{t("Приглашения доступны клиенту")}</h1><a className="text-link" href="/freelancers">{t("Найти исполнителя")}</a></section>;
-  const box = new URLSearchParams(window.location.search).get('box') ?? 'incoming';
-  if (!['incoming', 'sent'].includes(box)) return <section className="profile-card"><h1>{t("Неизвестный список приглашений")}</h1><a className="text-link" href="/me/invitations">{t("К входящим")}</a></section>;
-  return <><div className="profile-page-heading"><div><p className="eyebrow">{t("Предложение начать вместе")}</p><h1>{t("Приглашения")}</h1><p className="profile-help">{box === 'sent' ? t("Ответы исполнителей на ваши предложения.") : t("Заказчики предлагают вам свои проекты.")}</p></div><a className="text-link" href="/freelancers">{t("Найти исполнителя ↗")}</a></div><section className="profile-card"><nav className="invitation-tabs" aria-label={t("Списки приглашений")}><a href="/me/invitations" aria-current={box === 'incoming' ? 'page' : undefined}>{t("Входящие")}</a><a href="/me/invitations?box=sent" aria-current={box === 'sent' ? 'page' : undefined}>{t("Отправленные")}</a></nav><InvitationList key={box} path={`/me/invitations?box=${box}`} /></section></>;
+  if (user.role !== 'CLIENT') return <section className="profile-card"><h1>{t("Приглашения доступны клиенту")}</h1><Link className="text-link" href="/freelancers">{t("Найти исполнителя")}</Link></section>;
+  const box = new URLSearchParams(getLocation().search).get('box') ?? 'incoming';
+  if (!['incoming', 'sent'].includes(box)) return <section className="profile-card"><h1>{t("Неизвестный список приглашений")}</h1><Link className="text-link" href="/me/invitations">{t("К входящим")}</Link></section>;
+  return <><div className="profile-page-heading"><div><p className="eyebrow">{t("Предложение начать вместе")}</p><h1>{t("Приглашения")}</h1><p className="profile-help">{box === 'sent' ? t("Ответы исполнителей на ваши предложения.") : t("Заказчики предлагают вам свои проекты.")}</p></div><Link className="text-link" href="/freelancers">{t("Найти исполнителя ↗")}</Link></div><section className="profile-card"><nav className="invitation-tabs" aria-label={t("Списки приглашений")}><Link href="/me/invitations" aria-current={box === 'incoming' ? 'page' : undefined}>{t("Входящие")}</Link><Link href="/me/invitations?box=sent" aria-current={box === 'sent' ? 'page' : undefined}>{t("Отправленные")}</Link></nav><InvitationList key={box} path={`/me/invitations?box=${box}`} /></section></>;
 }

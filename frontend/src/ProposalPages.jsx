@@ -1,3 +1,4 @@
+import { Link } from './Navigation.jsx';
 import { t, locale } from "./i18n.js";import { ErrorMessage } from './Ui.jsx';
 import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
@@ -12,7 +13,7 @@ export function Agreement({ order }) {
   return <section className="proposal-agreement" aria-label={t("Согласованные условия заказа")}><p className="eyebrow">{{ IN_PROGRESS: t("Заказ в работе"), SUBMITTED: t("Результат на проверке"), REVISION_REQUESTED: t("Ожидается доработка"), COMPLETED: t("Заказ завершён"), CANCELLED: t("Заказ отменён") }[order.status]}</p><h3>{order.title}</h3>
     <p className="profile-help">{t("Условия и вложения зафиксированы при создании заказа.")}</p><dl className="proposal-terms"><div><dt>{t("Согласованная цена")}</dt><dd>{price(order.agreedPrice)}</dd></div><div><dt>{t("Согласованный срок")}</dt><dd>{date(order.initialDeadlineAt)}</dd></div></dl>
     <details><summary>{t("Описание и файлы задания")}</summary><p className="public-description">{order.description}</p>{order.files.length ? <div className="attachment-list">{order.files.map((file) => <FileLink key={file.id} file={file} privateFile />)}</div> : <p className="profile-help">{t("Вложений нет.")}</p>}</details>
-    <a className="text-link order-agreement-link" href={`/orders/${order.id}`}>{t("Открыть заказ ↗")}</a>
+    <Link className="text-link order-agreement-link" href={`/orders/${order.id}`}>{t("Открыть заказ ↗")}</Link>
   </section>;
 }
 function ProposalCard({ proposal, onChange }) {
@@ -24,8 +25,8 @@ function ProposalCard({ proposal, onChange }) {
   const choose = (kind) => {setAction(kind);setError(null);};
   return <article className="proposal-card">
     <div className="project-card-top"><span className={`project-status status-${proposal.status.toLowerCase()}`}>{proposal.expired ? t("Срок истёк") : statuses[proposal.status]}</span><span className="proposal-created">{date(proposal.createdAt)}</span></div>
-    <h3>{proposal.project.status === 'OPEN' ? <a className="text-link" href={`/projects/${proposal.project.id}`}>{proposal.project.title}</a> : proposal.project.title}</h3>
-    <p className="proposal-parties"><a href={`/users/${proposal.freelancer.id}`}>{proposal.freelancer.firstName} {proposal.freelancer.lastName}</a><span> → </span><a href={`/users/${proposal.customer.id}`}>{proposal.customer.firstName} {proposal.customer.lastName}</a></p>
+    <h3>{proposal.project.status === 'OPEN' ? <Link className="text-link" href={`/projects/${proposal.project.id}`}>{proposal.project.title}</Link> : proposal.project.title}</h3>
+    <p className="proposal-parties"><Link href={`/users/${proposal.freelancer.id}`}>{proposal.freelancer.firstName} {proposal.freelancer.lastName}</Link><span> → </span><Link href={`/users/${proposal.customer.id}`}>{proposal.customer.firstName} {proposal.customer.lastName}</Link></p>
     <p className="public-description">{proposal.message}</p><dl className="proposal-terms"><div><dt>{t("Предложенная цена")}</dt><dd>{price(proposal.offeredPrice)}</dd></div><div><dt>{t("Предложенный срок")}</dt><dd>{date(proposal.offeredDeadlineAt)}</dd></div></dl>
     {proposal.closureReason && <p className="proposal-reason">{reasons[proposal.closureReason] ?? proposal.closureReason}</p>}
     {proposal.expired && <p className="profile-help">{t("Этот отклик уже нельзя принять. Исполнитель может отправить новый с актуальным сроком.")}</p>}
@@ -64,7 +65,7 @@ export function ProjectProposals({ project, user, onProjectChange }) {
   useEffect(() => {if (!eligible) return;let active = true;setLoading(true);setChecked(false);setError(null);api(`/me/proposals?projectId=${project.id}&status=PENDING&pageSize=1`).then((data) => {if (active) {setPending(data.items[0] ?? null);setChecked(true);}}).
     catch((problem) => {if (active) setError(problem);}).finally(() => {if (active) setLoading(false);});return () => {active = false;};}, [project.id, user?.id, eligible, attempt]);
   if (project.isOwn && user?.role === 'CLIENT') return <section className="profile-card"><p className="eyebrow">{project.status === 'OPEN' ? t("Выберите исполнителя") : t("История предложений")}</p><h2>{t("Отклики на проект")}</h2><p className="profile-help">{project.status === 'OPEN' ? t("Примите подходящее предложение, чтобы зафиксировать условия и начать работу.") : t("Предложения, принятые решения и зафиксированные условия заказа.")}</p><ProposalList path={`/projects/${project.id}/proposals`} revision={project.status} onChange={(proposal) => {if (proposal.order) onProjectChange();}} /></section>;
-  if (!user && project.status === 'OPEN') return <section className="profile-card"><h2>{t("Готовы взяться за проект?")}</h2><p className="profile-help">{t("Войдите в аккаунт, чтобы предложить свои условия.")}</p><a className="text-link" href="/">{t("Войти или зарегистрироваться ↗")}</a></section>;
+  if (!user && project.status === 'OPEN') return <section className="profile-card"><h2>{t("Готовы взяться за проект?")}</h2><p className="profile-help">{t("Войдите в аккаунт, чтобы предложить свои условия.")}</p><Link className="text-link" href="/">{t("Войти или зарегистрироваться ↗")}</Link></section>;
   if (!eligible) return null;
   async function send(event) {event.preventDefault();if (!Number.isFinite(new Date(draft.offeredDeadlineAt).getTime())) {setError({ message: t("Укажите дату и время выполнения.") });return;}setBusy(true);setError(null);setMessage('');try {
       const result = await api(`/projects/${project.id}/proposals`, { method: 'POST', body: { message: draft.message, offeredPrice: draft.offeredPrice || null, offeredDeadlineAt: new Date(draft.offeredDeadlineAt).toISOString() } });
@@ -77,12 +78,12 @@ export function ProjectProposals({ project, user, onProjectChange }) {
       <div className="field"><label htmlFor="proposal-deadline">{t("Предлагаемый срок")}</label><input id="proposal-deadline" type="datetime-local" required value={draft.offeredDeadlineAt} onChange={(event) => setDraft({ ...draft, offeredDeadlineAt: event.target.value })} /><small>{t("Укажите дату и время в будущем.")}</small></div></div>
       <button type="submit">{busy ? t("Отправляем…") : t("Отправить отклик ↗")}</button>
     </fieldset></form>}
-    <ErrorMessage error={error} />{error && !pending && <button className="text-button" onClick={() => setAttempt((value) => value + 1)}>{t("Проверить состояние и продолжить")}</button>}<p className="save-message" role="status">{message}</p><a className="text-link" href="/me/proposals">{t("История моих откликов ↗")}</a>
+    <ErrorMessage error={error} />{error && !pending && <button className="text-button" onClick={() => setAttempt((value) => value + 1)}>{t("Проверить состояние и продолжить")}</button>}<p className="save-message" role="status">{message}</p><Link className="text-link" href="/me/proposals">{t("История моих откликов ↗")}</Link>
   </section>;
 }
 
 export function OwnProposalsPage({ user }) {
-  if (user.role !== 'CLIENT') return <section className="profile-card"><h1>{t("Отклики доступны клиенту")}</h1><a className="text-link" href="/projects">{t("Перейти в каталог")}</a></section>;
-  return <><div className="profile-page-heading"><div><p className="eyebrow">{t("Предложения и договорённости")}</p><h1>{t("Мои отклики")}</h1><p className="profile-help">{t("Следите за решениями заказчиков и возвращайтесь к согласованным условиям.")}</p></div><a className="button-link" href="/projects">{t("Найти проект ↗")}</a></div>
+  if (user.role !== 'CLIENT') return <section className="profile-card"><h1>{t("Отклики доступны клиенту")}</h1><Link className="text-link" href="/projects">{t("Перейти в каталог")}</Link></section>;
+  return <><div className="profile-page-heading"><div><p className="eyebrow">{t("Предложения и договорённости")}</p><h1>{t("Мои отклики")}</h1><p className="profile-help">{t("Следите за решениями заказчиков и возвращайтесь к согласованным условиям.")}</p></div><Link className="button-link" href="/projects">{t("Найти проект ↗")}</Link></div>
     <section className="profile-card"><ProposalList path="/me/proposals" /></section></>;
 }

@@ -1,3 +1,4 @@
+import { Link } from './Navigation.jsx';
 import { t, locale } from "./i18n.js";import { Pagination as CommonPagination, ErrorMessage } from './Ui.jsx';
 import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
@@ -49,7 +50,7 @@ export function OrderWorkPanel({ order, onChange }) {
       {loading ? <p role="status">{t("Загружаем версии…")}</p> : loadError ? <><ErrorMessage error={loadError} /><button className="text-button" onClick={() => setAttempt((value) => value + 1)}>{t("Повторить загрузку истории")}</button></> : <>
         {!submissions.items.length && <p className="portfolio-empty">{t("Результаты ещё не переданы на проверку.")}</p>}
         {submissions.items.map((item) => <article className="order-work-item" key={item.id}><div className="project-card-top"><h3>{t("Версия ")}{item.version}</h3><span className={`project-status status-${item.status.toLowerCase()}`}>{submissionStatuses[item.status]}</span></div><p className="order-closed">{date(item.createdAt)}</p><p className="public-description">{item.comment}</p>
-          {item.links.length > 0 && <ul className="portfolio-links">{item.links.map((link, index) => <li key={`${index}-${link}`}><a href={link} target="_blank" rel="noopener noreferrer">{link} ↗</a></li>)}</ul>}
+          {item.links.length > 0 && <ul className="portfolio-links">{item.links.map((link, index) => <li key={`${index}-${link}`}><Link href={link} target="_blank" rel="noopener noreferrer">{link} ↗</Link></li>)}</ul>}
           <div className="attachment-list">{item.files.map((file) => <FileLink key={file.id} file={file} privateFile />)}</div>
           {item.reviewedAt && <div className="order-review-note"><strong>{item.status === 'ACCEPTED' ? t("Заказчик принял версию") : t("Замечания заказчика")}</strong><p className="public-description">{item.reviewComment ?? t("Работа принята без дополнительных замечаний.")}</p><small>{date(item.reviewedAt)}</small></div>}
           {item.id === order.lastSubmission?.id && item.status === 'SUBMITTED' && order.permissions.acceptSubmission && <>

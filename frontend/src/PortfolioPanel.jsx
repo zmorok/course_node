@@ -1,3 +1,4 @@
+import { Link } from './Navigation.jsx';
 import { t, locale } from "./i18n.js";import { ErrorMessage } from './Ui.jsx';
 import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
@@ -17,8 +18,8 @@ export function FileLink({ file, privateFile = false }) {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (problem) {setError(problem);} finally {setBusy(false);}
   }
-  return <div className="attachment"><a href={`/api/files/${file.id}`} target={privateFile ? undefined : '_blank'} rel="noopener noreferrer" onClick={download}
-    aria-disabled={busy}>{busy ? t("Загружаем…") : file.originalName}</a><small>{sizeLabel(file.sizeBytes)}</small><ErrorMessage error={error} /></div>;
+  return <div className="attachment"><Link href={`/api/files/${file.id}`} target={privateFile ? undefined : '_blank'} rel="noopener noreferrer" onClick={download}
+    aria-disabled={busy}>{busy ? t("Загружаем…") : file.originalName}</Link><small>{sizeLabel(file.sizeBytes)}</small><ErrorMessage error={error} /></div>;
 }
 export function AvatarEditor({ fileId, onChange }) {
   const [busy, setBusy] = useState(false),[error, setError] = useState(null);
@@ -98,7 +99,7 @@ export function PortfolioPanel({ userId, editable = false }) {
       <div className="portfolio-items">{items.map((item) => <article className="portfolio-item" key={item.id}>
         {item.files.find((file) => file.mimeType.startsWith('image/')) && <img className="portfolio-cover" src={`/api/files/${item.files.find((file) => file.mimeType.startsWith('image/')).id}`} alt="" loading="lazy" />}
         <div className="portfolio-item-body"><h3>{item.title}</h3><p className="public-description">{item.description}</p>{item.experience && <p className="public-description">{item.experience}</p>}<div className="profile-tags">{(item.skills ?? []).map((skill) => <span key={skill}>{skill}</span>)}</div>
-          {item.links.length > 0 && <ul className="portfolio-links">{item.links.map((link, index) => <li key={`${index}-${link}`}><a href={link} target="_blank" rel="noopener noreferrer">{link} ↗</a></li>)}</ul>}
+          {item.links.length > 0 && <ul className="portfolio-links">{item.links.map((link, index) => <li key={`${index}-${link}`}><Link href={link} target="_blank" rel="noopener noreferrer">{link} ↗</Link></li>)}</ul>}
           <div className="attachment-list">{item.files.map((file) => <FileLink key={file.id} file={file} />)}</div>
           {editable && <div className="portfolio-actions"><button className="text-button" disabled={locked || Boolean(draft)} onClick={() => edit(item)}>{t("Редактировать")}</button>
             {confirmId === item.id ? <><span>{t("Удалить работу и вложения?")}</span><button className="text-button danger" disabled={locked} onClick={() => removeItem(item.id)}>{t("Да, удалить")}</button><button className="text-button" disabled={locked} onClick={() => setConfirmId(null)}>{t("Отмена")}</button></> :
