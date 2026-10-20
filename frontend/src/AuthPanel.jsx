@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import {ErrorMessage} from './Ui.jsx';
 
 const fields = {
   firstName: ['Имя', 'text', 'given-name'], lastName: ['Фамилия', 'text', 'family-name'],
@@ -38,8 +39,9 @@ export function AuthPanel({ onAuthenticate, restoring, notice }) {
       <h2 id="auth-title">{isRegister ? 'Создать аккаунт' : 'Войти в рабочее пространство'}</h2>
       <p className="auth-description">{isRegister ? 'Один аккаунт — для своих проектов и работы исполнителем.' : 'Продолжите работу над тем, что важно.'}</p>
       {restoring ? <p role="status">Восстанавливаем сессию…</p> : <>
-        {(problem || notice) && <div className="form-error" role="alert">{problem?.message ?? notice}</div>}
-        <form key={mode} onSubmit={submit}>
+        <ErrorMessage error={problem}/>
+        {!problem&&notice&&<p className="form-notice" role="status">{notice}</p>}
+        <form key={mode} onSubmit={submit} aria-busy={busy}>
           <fieldset disabled={busy}>
             <div className={isRegister ? 'form-fields register-fields' : 'form-fields'}>
               {names.map(name => {
