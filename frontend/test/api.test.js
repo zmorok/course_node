@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { english } from '../src/en.js';
 
 async function client(context, responses) {
   const original = Object.fromEntries(['window', 'navigator', 'BroadcastChannel', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -23,6 +24,23 @@ async function client(context, responses) {
 }
 const problem = (status, code) => ({ status, body: { error: { code, message: code, details: [] } } });
 const refresh = { status: 200, body: { user: { id: 'user-id' }, accessToken: 'fresh-access-token' } };
+
+test('an existing API error uses the current language without repeating the request', async context => {
+  const original = globalThis.localStorage;
+  let language = 'ru';
+  globalThis.localStorage = { getItem: () => language };
+  context.after(() => { globalThis.localStorage = original; });
+  const app = await client(context, [{ status: 422, body: { error: { code: 'VALIDATION_ERROR', message: 'Пароли не совпадают', details: [{ field: 'password', message: 'Повторите тот же пароль' }] } } }]);
+  let error;
+  try { await app.api('/me/profile'); } catch (problem) { error = problem; }
+  assert.equal(error.message, 'Пароли не совпадают');
+  language = 'en';
+  assert.equal(error.message, english['Пароли не совпадают']);
+  assert.equal(error.details[0].message, english['Повторите тот же пароль']);
+  language = 'ru';
+  assert.equal(error.message, 'Пароли не совпадают');
+  assert.equal(app.calls.length, 1);
+});
 
 test('a business 403 after successful refresh preserves the current session', async context => {
   const app = await client(context, [problem(401, 'UNAUTHENTICATED'), refresh, problem(403, 'INVALID_CURRENT_PASSWORD')]);
