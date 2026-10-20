@@ -372,3 +372,5 @@ button:disabled{cursor:default}
 @media(max-width:480px){.profile-nav{font-size:12px;gap:10px 14px}.nav-more{width:100%}.nav-more summary{width:fit-content}.nav-menu{position:static;margin-top:8px;min-width:0;grid-template-columns:repeat(2,minmax(0,1fr))}.nav-menu a{font-size:12px}.project-status{font-size:11px}.admin-filters input,.admin-filters select{max-width:100%}.profile-page-heading h1{font-size:28px;letter-spacing:-.8px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
 .form-notice{padding:12px;border:1px solid #d8e0d2;border-radius:8px;background:#eff2e9;color:#355845;font-size:12px;line-height:1.6}
+
+.review-image{max-width:100%;max-height:300px;object-fit:contain;border-radius:12px;}
