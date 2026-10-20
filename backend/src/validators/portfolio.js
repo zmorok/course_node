@@ -1,7 +1,7 @@
 import { object } from './object.js';
 import { text, uuid, optional } from './fields.js';
-function content(max,multiline=false) {
-  const parse = text({ max });
+function content(max,multiline=false,min=1) {
+  const parse = text({ max, min });
   return (input,field,issues) => {
     const value = parse(input,field,issues);
     if (value && (multiline ? /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/ : /[\u0000-\u001f\u007f]/).test(value)) issues.push({ field,message:'Недопустимые управляющие символы' });
@@ -10,7 +10,7 @@ function content(max,multiline=false) {
 }
 export const portfolioParams = object({ itemId: uuid() },{ field:'params' });
 export const portfolioUserParams = object({ userId: uuid() },{ field:'params' });
-export const portfolioInput = object({ title: content(200), description: content(5000,true),
+export const portfolioInput = object({ experience: optional(content(5000,true,0),''), skills: optional((value,field,issues)=>{if(!Array.isArray(value)||value.length>50){issues.push({field,message:'Укажите не более 50 навыков'});return;}return [...new Set(value.map((item,index)=>content(100)(item,`${field}.${index}`,issues)))];},[]), title: content(200), description: content(5000,true),
   links: optional((input,field,issues) => {
     if (!Array.isArray(input) || input.length > 5) { issues.push({ field,message:'Укажите не более 5 ссылок' }); return; }
     return input.map((link,index) => {

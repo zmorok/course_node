@@ -45,6 +45,14 @@ async function setup(context) {
 }
 const item=(fileIds=[])=>({title:'Сайт команды',description:'Работа над сайтом\n<script>escaped</script>',links:['https://example.org/demo'],fileIds});
 
+test('portfolio persists and publicly exposes experience and skills of the individual work',async context=>{
+ const app=await setup(context),owner=await app.register();
+ const created=await app.request('/api/me/portfolio',options(owner.token,'POST',{...item(),experience:'Разработал интерфейс',skills:['React','CSS']}));
+ assert.equal(created.response.status,201,JSON.stringify(created.body));assert.equal(created.body.item.experience,'Разработал интерфейс');assert.deepEqual(created.body.item.skills,['React','CSS']);
+ const visible=await app.request(`/api/users/${owner.id}/portfolio`);assert.deepEqual(visible.body.items[0].skills,['React','CSS']);
+ const updated=await app.request(`/api/me/portfolio/${created.body.item.id}`,options(owner.token,'PUT',{...item(),experience:'',skills:[]}));assert.equal(updated.response.status,200);assert.equal(updated.body.item.experience,'');assert.deepEqual(updated.body.item.skills,[]);
+});
+
 test('file upload persists only metadata with SHA-256; unlinked download is owner-only',async context=>{
   const app=await setup(context),owner=await app.register(),other=await app.register();
   assert.equal((await app.upload()).response.status,401);

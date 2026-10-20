@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open, unlink } from 'node:fs/promises';
+import { open, unlink, lstat } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 
 export function createLocalStorage(directory) {
@@ -18,7 +18,9 @@ export function createLocalStorage(directory) {
       await file.close();
     },
     async open(key) {
-      const file = await open(pathFor(key), constants.O_RDONLY | constants.O_NOFOLLOW);
+      const path=pathFor(key);
+      if((await lstat(path)).isSymbolicLink()) throw new Error('Storage object is a symbolic link');
+      const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
         const stat = await file.stat();
         if (!stat.isFile()) throw new Error('Storage object is not a regular file');

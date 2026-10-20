@@ -1,6 +1,6 @@
 import {createAuditRepository} from './audit.repository.js';
 // Keep every association here: a generic delete must respect future private contexts too.
-const references = ['profile_files', 'portfolio_files', 'project_files', 'order_files', 'submission_files', 'complaint_files'];
+const references = ['profile_files', 'portfolio_files', 'project_files', 'order_files', 'submission_files', 'complaint_files', 'review_files'];
 const isUsed = alias => references.map(table => `EXISTS (SELECT 1 FROM workify.${table} r WHERE r.file_id = ${alias}.id)`).join(' OR ');
 export function createFileRepository(database) {
   return {
@@ -29,6 +29,7 @@ export function createFileRepository(database) {
           JOIN workify.v_public_profiles p ON p.user_id=pf.user_id WHERE pf.file_id=f.id)
         OR EXISTS (SELECT 1 FROM workify.portfolio_files pf JOIN workify.portfolio_items i ON i.id=pf.portfolio_item_id
           JOIN workify.v_public_profiles p ON p.user_id=i.user_id WHERE pf.file_id=f.id)
+        OR EXISTS (SELECT 1 FROM workify.review_files rf JOIN workify.reviews r ON r.id=rf.review_id JOIN workify.v_public_profiles p ON p.user_id=r.recipient_id WHERE rf.file_id=f.id AND r.deleted_at IS NULL)
         OR EXISTS (SELECT 1 FROM workify.project_files pf JOIN workify.projects p ON p.id=pf.project_id
           JOIN workify.v_public_profiles customer ON customer.user_id=p.customer_id
           WHERE pf.file_id=f.id AND p.status='OPEN')
