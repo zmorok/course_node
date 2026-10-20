@@ -17,5 +17,9 @@ export function createAdminRouter(service,authService){const router=Router(),c=c
   router.get('/admin/users/:userId',...auth,validate(profileParams,'params'),validate(orderDetailQuery,'query'),asyncHandler(c.user));
   router.get('/admin/users/:userId/sanctions',...auth,validate(profileParams,'params'),validate(workQuery,'query'),asyncHandler(c.sanctions));
   for(const [command,rule] of [['block',adminBlock],['unblock',adminUnblock]])router.post(`/admin/users/:userId/${command}`,...auth,writes,validate(profileParams,'params'),validate(orderDetailQuery,'query'),validate(rule),asyncHandler(c[command]));
+  router.get('/admin/complaints',...auth,validate(adminComplaintQuery,'query'),asyncHandler(c.queue));
+  router.get('/admin/complaints/:complaintId',...auth,validate(complaintParams,'params'),validate(orderDetailQuery,'query'),asyncHandler(c.detail));
+  for(const [command,rule] of [['claim',emptyCommand],['reject',adminReject],['resolve',adminResolve]])router.post(`/admin/complaints/:complaintId/${command}`,...auth,writes,validate(complaintParams,'params'),validate(orderDetailQuery,'query'),validate(rule),asyncHandler(c[command]));
+  router.get('/admin/complaints/:complaintId/:section',...auth,validate(adminContextParams,'params'),validate(workQuery,'query'),asyncHandler(c.context));
   return router;
 }

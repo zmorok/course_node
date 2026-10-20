@@ -4,4 +4,10 @@ export function createAdminController(service){const json=(res,data)=>res.set('C
   sanctions:async(req,res)=>json(res,await service.sanctions(req.user,req.validated.params.userId,req.validated.query)),
   block:async(req,res)=>json(res,await service.block(req.user,req.validated.params.userId,req.validated.body)),
   unblock:async(req,res)=>json(res,await service.unblock(req.user,req.validated.params.userId,req.validated.body)),
+  queue:async(req,res)=>json(res,await service.queue(req.user,req.validated.query)),
+  detail:async(req,res)=>json(res,await service.detail(req.user,req.validated.params.complaintId)),
+  context:async(req,res)=>json(res,await service.context(req.user,req.validated.params.complaintId,req.validated.params.section,req.validated.query)),
+  claim:async(req,res)=>json(res,await service.claim(req.user,req.validated.params.complaintId)),
+  reject:async(req,res)=>json(res,await service.reject(req.user,req.validated.params.complaintId,req.validated.body)),
+  resolve:async(req,res)=>json(res,await service.resolve(req.user,req.validated.params.complaintId,req.validated.body)),
 };}
