@@ -20,17 +20,8 @@ import { startApp } from '../helpers/http.js';
 if(process.env.WORKIFY_DB_TESTS!=='1') throw new Error('Use the disposable infrastructure test database');
 const config=loadConfig({...process.env,NODE_ENV:'test'}), pool=createDatabasePool(config.database), owned=[];
 const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6x2kAAAAASUVORK5CYII=','base64');
-after(async()=>{
-  try {
-    await pool.query("UPDATE workify.users SET status='ACTIVE',blocked_by=NULL,blocked_at=NULL,blocked_until=NULL,block_reason=NULL WHERE id=ANY($1::uuid[])",[owned]);
-    await pool.query('DELETE FROM workify.portfolio_items WHERE user_id=ANY($1::uuid[])',[owned]);
-    await pool.query('DELETE FROM workify.profile_files WHERE user_id=ANY($1::uuid[])',[owned]);
-    await pool.query('DELETE FROM workify.stored_files WHERE uploaded_by=ANY($1::uuid[])',[owned]);
-    await pool.query('DELETE FROM workify.auth_sessions WHERE user_id=ANY($1::uuid[])',[owned]);
-    await pool.query('DELETE FROM workify.profiles WHERE user_id=ANY($1::uuid[])',[owned]);
-    await pool.query('DELETE FROM workify.users WHERE id=ANY($1::uuid[])',[owned]);
-  } finally { await pool.end(); }
-});
+// Immutable audit keeps its actors until the disposable database is removed.
+after(()=>pool.end());
 const options=(token,method='GET',body)=>({method,headers:{ ...(token?{Authorization:`Bearer ${token}`}:{ }),
   'Content-Type':'application/json','X-Workify-Client':'browser' },...(body===undefined?{}:{body:JSON.stringify(body)})});
 async function setup(context) {

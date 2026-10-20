@@ -14,14 +14,8 @@ if (process.env.WORKIFY_DB_TESTS !== '1') throw new Error('Use the disposable da
 const config = loadConfig({ ...process.env, NODE_ENV: 'test' });
 const pool = createDatabasePool(config.database);
 const owned = [];
-after(async () => {
-  try {
-    await pool.query("UPDATE workify.users SET status='ACTIVE', blocked_by=NULL, blocked_at=NULL, blocked_until=NULL, block_reason=NULL WHERE id=ANY($1::uuid[])", [owned]);
-    await pool.query('DELETE FROM workify.auth_sessions WHERE user_id=ANY($1::uuid[])', [owned]);
-    await pool.query('DELETE FROM workify.profiles WHERE user_id=ANY($1::uuid[])', [owned]);
-    await pool.query('DELETE FROM workify.users WHERE id=ANY($1::uuid[])', [owned]);
-  } finally { await pool.end(); }
-});
+// Immutable audit keeps its actors until the disposable database is removed.
+after(()=>pool.end());
 const post = body => ({ method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Workify-Client': 'browser' }, ...(body ? { body: JSON.stringify(body) } : {}) });
 const bearer = token => ({ headers: { Authorization: `Bearer ${token}` } });
 const cookieOf = result => result.response.headers.get('set-cookie')?.split(';')[0];
