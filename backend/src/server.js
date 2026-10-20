@@ -76,7 +76,7 @@ try {
   const warningService=createWarningService({repository:createWarningRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createWarningRepository(client)))});
   const adminService=createAdminService({repository:createAdminRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createAdminRepository(client)))});
   const notificationService=createNotificationService({repository:createNotificationRepository(pool)});
-  const auditService=createAuditService({repository:createAuditRepository(pool)});
+  const auditService=createAuditService({repository:createAuditRepository(pool),transaction:op=>withTransaction(pool,client=>op(createAuditRepository(client)))});
   const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService, adminService, auditService, notificationService });
   const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
   const server = await new Promise((resolve, reject) => {
