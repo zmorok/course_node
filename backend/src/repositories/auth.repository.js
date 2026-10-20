@@ -5,6 +5,7 @@ const publicColumns = `u.id, u.email, u.username, u.role, u.status, u.blocked_un
 export function createAuthRepository(database) {
   return {
     audit:createAuditRepository(database).audit,
+    async touchPresence(id) { await database.query("UPDATE workify.users SET last_online_at=clock_timestamp() WHERE id=$1 AND (last_online_at IS NULL OR last_online_at < now()-interval '1 minute')",[id]); },
     async findByEmail(email) {
       const result = await database.query(`SELECT ${publicColumns}, u.password_hash
         FROM workify.users u JOIN workify.profiles p ON p.user_id = u.id

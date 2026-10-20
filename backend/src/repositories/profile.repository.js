@@ -3,7 +3,7 @@ const skills = `COALESCE((SELECT jsonb_agg(jsonb_build_object('id', s.id, 'slug'
   ORDER BY s.name, s.id) FROM workify.user_skills us JOIN workify.skills s ON s.id = us.skill_id
   WHERE us.user_id = p.user_id), '[]'::jsonb) AS skills`;
 const accountColumns = { email: 'email', username: 'username' };
-const profileColumns = { firstName: 'first_name', lastName: 'last_name', headline: 'headline',
+const profileColumns = { middleName: 'middle_name', gender: 'gender', firstName: 'first_name', lastName: 'last_name', headline: 'headline',
   description: 'description', phone: 'phone', city: 'city', country: 'country' };
 
 export function createProfileRepository(database) {
@@ -17,7 +17,7 @@ export function createProfileRepository(database) {
     audit:createAuditRepository(database).audit,
     async findOwn(userId) {
       return (await database.query(`SELECT u.id, u.email, u.username, p.first_name, p.last_name,
-        p.headline, p.description, p.phone, p.city, p.country, p.created_at, p.updated_at,
+        p.middle_name, p.gender, u.last_online_at, p.headline, p.description, p.phone, p.city, p.country, p.created_at, p.updated_at,
         (SELECT file_id FROM workify.profile_files WHERE user_id=p.user_id) AS avatar_file_id, ${skills}
         FROM workify.users u JOIN workify.profiles p ON p.user_id = u.id WHERE u.id = $1`, [userId])).rows[0];
     },
@@ -28,6 +28,8 @@ export function createProfileRepository(database) {
       return (await database.query(`SELECT id, email, username, password_hash, role, status, blocked_until
         FROM workify.users WHERE id = $1 FOR UPDATE`, [userId])).rows[0];
     },
+    async updatePassword(id, hash) { await database.query('UPDATE workify.users SET password_hash=$2 WHERE id=$1',[id,hash]); },
+    async revokeSessions(id) { await database.query('UPDATE workify.auth_sessions SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE user_id=$1',[id]); },
     async updateAccount(userId, patch) {
       const changes = assignments(accountColumns, patch);
       if (changes.values.length) await database.query(`UPDATE workify.users SET ${changes.sql} WHERE id = $1`, [userId, ...changes.values]);

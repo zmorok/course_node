@@ -1,10 +1,10 @@
 import { AppError, ValidationError } from '../utils/app-error.js';
-import { verifyPassword } from '../utils/password.js';
+import { verifyPassword, hashPassword } from '../utils/password.js';
 
 const missing = () => new AppError(404, 'PROFILE_NOT_FOUND', 'Профиль не найден');
 function ownProfile(row) {
   return { id: row.id, email: row.email, username: row.username, firstName: row.first_name, lastName: row.last_name,
-    headline: row.headline, description: row.description, phone: row.phone, city: row.city, country: row.country,
+    middleName: row.middle_name, gender: row.gender, lastOnlineAt: row.last_online_at, headline: row.headline, description: row.description, phone: row.phone, city: row.city, country: row.country,
     skills: row.skills, avatarFileId: row.avatar_file_id, createdAt: row.created_at, updatedAt: row.updated_at };
 }
 function requireActive(user) {
@@ -24,7 +24,7 @@ export function createProfileService({ repository, transaction }) {
       const row = await repository.findPublic(userId);
       if (!row) throw missing();
       return { id: row.user_id, username: row.username, firstName: row.first_name, lastName: row.last_name,
-        headline: row.headline, description: row.description, city: row.city, country: row.country,
+        middleName: row.middle_name, gender: row.gender, lastOnlineAt: row.last_online_at, headline: row.headline, description: row.description, city: row.city, country: row.country,
         skills: row.skills, avatarFileId: row.avatar_file_id,
         customerRating: row.customer_rating, customerReviewCount: Number(row.customer_review_count),
         freelancerRating: row.freelancer_rating, freelancerReviewCount: Number(row.freelancer_review_count) };
@@ -54,6 +54,17 @@ export function createProfileService({ repository, transaction }) {
         if (error.code === '23505') throw new AppError(409, 'PROFILE_CONFLICT', 'Email или имя пользователя уже заняты');
         throw error;
       }
+    },
+    async changePassword(actor, input) {
+      return transaction(async repo => {
+        const user = await repo.lockAccount(actor.id); requireActive(user);
+        if (!await verifyPassword(user.password_hash,input.currentPassword)) throw new AppError(403,'INVALID_CURRENT_PASSWORD','Текущий пароль указан неверно');
+        if (input.currentPassword === input.newPassword) throw new ValidationError([{field:'body.newPassword',message:'Новый пароль должен отличаться от текущего'}]);
+        await repo.updatePassword(actor.id,await hashPassword(input.newPassword));
+        await repo.revokeSessions(actor.id);
+        await repo.audit(actor.id,'PASSWORD_CHANGED','user',actor.id);
+        return {reauthenticate:true};
+      });
     },
     async listSkills() { return repository.listSkills(); },
     async replaceSkills(actor, ids) {

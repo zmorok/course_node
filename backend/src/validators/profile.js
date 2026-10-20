@@ -1,5 +1,5 @@
 import { object } from './object.js';
-import { optional, text, uuid } from './fields.js';
+import { optional, text, uuid, oneOf } from './fields.js';
 import { emailField, usernameField } from './auth.js';
 import { ValidationError } from '../utils/app-error.js';
 
@@ -22,6 +22,7 @@ function nullableText(max, pattern) {
   };
 }
 const parsePatch = object({
+  middleName: optional(nullableText(100)), gender: optional((value, field, issues) => value === null || value === '' ? null : oneOf(['Male','Female','Other'])(value, field, issues)),
   firstName: optional(safeText({ max: 100 })), lastName: optional(safeText({ max: 100 })),
   headline: optional(safeText({ min: 0, max: 200 })),
   description: optional(safeText({ min: 0, max: 5000 }, true)),
@@ -50,3 +51,5 @@ export const userSkillsInput = object({
     return ids;
   },
 });
+
+export const passwordChange = object({currentPassword: text({min:1,max:128,trim:false}),newPassword: text({min:12,max:128,trim:false})});

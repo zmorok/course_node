@@ -4,7 +4,7 @@ import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { AppError } from '../utils/app-error.js';
-import { profilePatch, profileParams, userSkillsInput } from '../validators/profile.js';
+import { profilePatch, profileParams, userSkillsInput, passwordChange } from '../validators/profile.js';
 import { createProfileController } from '../controllers/profile.controller.js';
 
 export function createProfileRouter(service, authService) {
@@ -17,5 +17,6 @@ export function createProfileRouter(service, authService) {
   router.get('/me/profile', authenticated, asyncHandler(controller.getOwn));
   router.patch('/me/profile', authenticated, writes, validate(profilePatch), asyncHandler(controller.updateOwn));
   router.put('/me/skills', authenticated, roleMiddleware('CLIENT'), writes, validate(userSkillsInput), asyncHandler(controller.replaceSkills));
+  router.post('/me/password', authenticated, writes, validate(passwordChange), asyncHandler(controller.changePassword));
   return router;
 }
