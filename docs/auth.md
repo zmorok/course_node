@@ -81,3 +81,5 @@ node scripts/test-infrastructure.mjs
 Из исторической базы прочитаны OOP `FreelanceApp/Authentication/LoginWindow.xaml.cs`, `RegisterWindow.xaml.cs` и `Windows/ViewModels/Admin/UserManagmentViewModel.cs`. Сохранены email-вход, обязательные имя/фамилия и серверный выбор клиентской роли; SHA-512, показ пароля после регистрации и прямой доступ desktop-клиента к БД не переносятся. Сопоставлены текущие `_материалы/Workify_STSR_Project_Specification_v4/docs/08_rest_api.md` и `12_security.md`; путь API взят из stage prompt (/api), платежи исключены.
 
 Первичные источники: [node-argon2](https://github.com/ranisalt/node-argon2), [jose](https://github.com/panva/jose), [OWASP Password Storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html).
+
+Успешные операции сессий записываются в [централизованный аудит](audit.md) без credentials. Вход перепроверяет актуальные email, пароль и блокировку под блокировкой пользователя. Ротация refresh, logout и модерация используют порядок пользователь → сессия, что исключает выдачу сессии после конкурентной блокировки и взаимную блокировку audit FK.
