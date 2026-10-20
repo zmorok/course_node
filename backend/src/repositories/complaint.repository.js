@@ -14,5 +14,9 @@ export function createComplaintRepository(database){return {
     SELECT (SELECT count(*) FROM matches)::int AS total,COALESCE((SELECT jsonb_agg(page ORDER BY created_at DESC,id DESC) FROM page),'[]'::jsonb) AS items`,[actorId,query.status??null,query.pageSize,(query.page-1)*query.pageSize])).rows[0];},
   async create(order,actorId,input){const target=actorId===order.customer_id?order.freelancer_id:order.customer_id;return (await database.query(`INSERT INTO workify.complaints(order_id,customer_id,freelancer_id,reporter_id,target_id,reason,description,created_at,updated_at)
     VALUES($1,$2,$3,$4,$5,$6,$7,statement_timestamp(),statement_timestamp()) RETURNING id`,[order.id,order.customer_id,order.freelancer_id,actorId,target,input.reason,input.description])).rows[0].id;},
+  async lockOwn(id,actorId){return (await database.query('SELECT * FROM workify.complaints WHERE id=$1 AND reporter_id=$2 FOR UPDATE',[id,actorId])).rows[0];},
+  async update(id,input){await database.query('UPDATE workify.complaints SET reason=$2,description=$3 WHERE id=$1',[id,input.reason,input.description]);},
+  async detach(id){await database.query('DELETE FROM workify.complaint_files WHERE complaint_id=$1',[id]);},
+  async remove(id){await database.query('DELETE FROM workify.complaints WHERE id=$1',[id]);},
   async attach(id,fileIds){if(fileIds.length)await database.query('INSERT INTO workify.complaint_files(complaint_id,file_id) SELECT $1,unnest($2::uuid[])',[id,fileIds]);},
 };}
