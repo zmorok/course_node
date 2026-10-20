@@ -309,6 +309,11 @@ select:focus { outline:2px solid #507d64;outline-offset:2px; }
 .order-timeline h3 { font-size:15px;line-height:1.7;margin:8px 0; }
 .order-timeline p { font-size:12px;line-height:1.8;margin:6px 0; }
 .review-card { border-top:1px solid #dfe6d9;margin-top:24px;padding-top:22px;min-width:0; }
+.complaint-card { border-top:1px solid #dfe6d9;margin-top:24px;padding-top:22px;min-width:0;overflow-wrap:anywhere; }
+.complaint-card h3 { font-size:18px;margin:0;line-height:1.6; }
+.order-filter { display:flex;flex-wrap:wrap;gap:10px;align-items:center; }
+.order-filter label { width:100%;font-size:12px; }
+.order-filter select { width:230px;max-width:100%; }
 .review-rating { color:#456342;background:#edf2e6;padding:7px 10px;border-radius:8px;font-size:16px;white-space:nowrap; }
 .review-people { font-size:12px;line-height:1.8;overflow-wrap:anywhere; }
 .review-order { display:inline-block;font-size:13px;margin-top:12px;overflow-wrap:anywhere; }

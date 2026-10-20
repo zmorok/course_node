@@ -28,10 +28,14 @@ import {createOrderWorkRepository} from '../../src/repositories/order-work.repos
 import {createOrderWorkService} from '../../src/services/order-work.service.js';
 import {createReviewRepository} from '../../src/repositories/review.repository.js';
 import {createReviewService} from '../../src/services/review.service.js';
+import {createComplaintRepository} from '../../src/repositories/complaint.repository.js';
+import {createComplaintService} from '../../src/services/complaint.service.js';
+import {createWarningRepository} from '../../src/repositories/warning.repository.js';
+import {createWarningService} from '../../src/services/warning.service.js';
 import {createApiRouter} from '../../src/routes/index.js';
 import {startApp} from './http.js';
 export const future=(days=30)=>new Date(Date.now()+days*86400000).toISOString();
-export async function marketplace(context,pool,config,{failEvent=()=>false,failWorkEvent=()=>false,failReviewAudit=()=>false}={}){
+export async function marketplace(context,pool,config,{failEvent=()=>false,failWorkEvent=()=>false,failReviewAudit=()=>false,failComplaintAudit=()=>false,failWarningAudit=()=>false}={}){
   const directory=await mkdtemp(join(tmpdir(),'workify-invitations-'));context.after(()=>rm(directory,{recursive:true,force:true}));
   const tx=op=>withTransaction(pool,c=>{const assignments=createAssignmentRepository(c),original=assignments.createdEvent;assignments.createdEvent=async(...args)=>{if(failEvent())throw new Error('injected order event failure');return original(...args);};return op(c,assignments);});
   const authService=await createAuthService({repository:createAuthRepository(pool),accessTokens:createAccessTokens(config.auth),sessionTtlDays:30,transaction:op=>withTransaction(pool,c=>op(createAuthRepository(c)))});
@@ -45,7 +49,9 @@ export async function marketplace(context,pool,config,{failEvent=()=>false,failW
   const orderWorkService=createOrderWorkService({repository:createOrderWorkRepository(pool),orders:createOrderRepository(pool),fileService,
     transaction:op=>withTransaction(pool,c=>{const repo=createOrderWorkRepository(c),event=repo.event;repo.event=async(...args)=>{if(failWorkEvent(args[2]))throw new Error('injected work event failure');return event(...args);};return op(repo,createOrderRepository(c),createFileRepository(c));})});
   const reviewService=createReviewService({repository:createReviewRepository(pool),transaction:op=>withTransaction(pool,c=>{const repo=createReviewRepository(c),audit=repo.audit;repo.audit=async(...args)=>{if(failReviewAudit(args[1]))throw new Error('injected review audit failure');return audit(...args);};return op(repo);})});
-  const app=await startApp(context,createApiRouter({authService,authConfig:config.auth,fileService,profileService,projectService,proposalService,freelancerService,invitationService,orderService,orderWorkService,reviewService,healthService:{check:async()=>({status:'ok'})}}));
+  const complaintService=createComplaintService({repository:createComplaintRepository(pool),fileService,transaction:op=>withTransaction(pool,c=>{const repo=createComplaintRepository(c),audit=repo.audit;repo.audit=async(...args)=>{if(failComplaintAudit())throw new Error('injected complaint audit failure');return audit(...args);};return op(repo,createFileRepository(c));})});
+  const warningService=createWarningService({repository:createWarningRepository(pool),transaction:op=>withTransaction(pool,c=>{const repo=createWarningRepository(c),audit=repo.audit;repo.audit=async(...args)=>{if(failWarningAudit())throw new Error('injected warning audit failure');return audit(...args);};return op(repo);})});
+  const app=await startApp(context,createApiRouter({authService,authConfig:config.auth,fileService,profileService,projectService,proposalService,freelancerService,invitationService,orderService,orderWorkService,reviewService,complaintService,warningService,healthService:{check:async()=>({status:'ok'})}}));
   const api=(actor,path,method='GET',body)=>app.request(`/api${path}`,{method,headers:{...(actor?{Authorization:`Bearer ${actor.token}`}:{ }),'Content-Type':'application/json','X-Workify-Client':'browser'},...(body===undefined?{}:{body:JSON.stringify(body)})});
   return {...app,api,async register(patch={}){const suffix=randomUUID().replaceAll('-','');const result=await api(null,'/auth/register','POST',{email:`${suffix}@example.invalid`,username:`i_${suffix}`,firstName:'Участник',lastName:'Тест',password:'invitation test password',...patch});assert.equal(result.response.status,201);return {id:result.body.user.id,token:result.body.accessToken,user:result.body.user};},
     async project(owner,{file=false,draft=false}={}){let fileId;if(file){const form=new FormData();form.append('file',new Blob(['Задание по приглашению'],{type:'text/plain'}),'Задание.txt');const uploaded=await app.request('/api/files',{method:'POST',headers:{Authorization:`Bearer ${owner.token}`},body:form});assert.equal(uploaded.response.status,201);fileId=uploaded.body.file.id;}
