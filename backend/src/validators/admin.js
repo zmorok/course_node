@@ -15,3 +15,11 @@ export const adminReject=object({resolutionNote:content(5000)});
 const action=object({targetId:uuid(),type:oneOf(['WARNING','TEMPORARY_BLOCK','PERMANENT_BLOCK']),reason:content(5000),expiresAt:expiry});
 export const adminResolve=object({resolutionNote:content(5000),actions:(input,field,issues)=>{if(!Array.isArray(input)||input.length<1||input.length>6){issues.push({field,message:'Укажите от 1 до 6 санкций'});return;}const result=input.map((value,index)=>{try{return action(value);}catch(error){if(!(error instanceof ValidationError))throw error;issues.push(...error.details.map(issue=>({...issue,field:`${field}.${index}.${issue.field.replace(/^body\./,'')}`})));}});const keys=result.filter(Boolean).map(value=>`${value.targetId}:${value.type}`);if(new Set(keys).size!==keys.length)issues.push({field,message:'Санкции одного типа для одного участника не должны повторяться'});return result;}});
 export const adminContextParams=object({complaintId:uuid(),section:oneOf(['submissions','deadline-requests','events','reviews'])},{field:'params'});
+
+import {profileFields} from './profile.js';
+import {emailField,usernameField} from './auth.js';
+const {currentPassword,...editableProfile}=profileFields;
+export const adminAccountCreate=object({...editableProfile,email:emailField(),username:usernameField(),firstName:text({max:100}),lastName:text({max:100}),password:text({min:12,max:128,trim:false}),role:optional(oneOf(['CLIENT','ADMIN']),'CLIENT')});
+const parseAccountPatch=object({...editableProfile,role:optional(oneOf(['CLIENT','ADMIN'])),newPassword:optional(text({min:12,max:128,trim:false}))});
+export function adminAccountUpdate(input){const result=parseAccountPatch(input);if(!Object.keys(result).length)throw new ValidationError([{field:'body',message:'Укажите изменения пользователя'}]);return result;}
+export const adminAccountDelete=object({reason:content(1000)});

@@ -21,7 +21,7 @@ function nullableText(max, pattern) {
     return value === '' ? null : value;
   };
 }
-const parsePatch = object({
+export const profileFields = {
   middleName: optional(nullableText(100)), gender: optional((value, field, issues) => value === null || value === '' ? null : oneOf(['Male','Female','Other'])(value, field, issues)),
   firstName: optional(safeText({ max: 100 })), lastName: optional(safeText({ max: 100 })),
   headline: optional(safeText({ min: 0, max: 200 })),
@@ -30,7 +30,8 @@ const parsePatch = object({
   city: optional(nullableText(100)), country: optional(nullableText(100)),
   email: optional(emailField()), username: optional(usernameField()),
   currentPassword: optional(text({ min: 1, max: 128, trim: false })),
-});
+};
+const parsePatch = object(profileFields);
 export function profilePatch(input) {
   const value = parsePatch(input);
   if (!Object.keys(value).some(key => key !== 'currentPassword')) {

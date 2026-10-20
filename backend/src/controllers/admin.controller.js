@@ -1,4 +1,7 @@
 export function createAdminController(service){const json=(res,data)=>res.set('Cache-Control','no-store').json(data);return {
+  createUser:async(req,res)=>res.status(201).json(await service.createUser(req.user,req.validated.body)),
+  updateUser:async(req,res)=>res.json(await service.updateUser(req.user,req.validated.params.userId,req.validated.body)),
+  deleteUser:async(req,res)=>res.json(await service.deleteUser(req.user,req.validated.params.userId,req.validated.body)),
   users:async(req,res)=>json(res,await service.users(req.user,req.validated.query)),
   user:async(req,res)=>json(res,await service.user(req.user,req.validated.params.userId)),
   sanctions:async(req,res)=>json(res,await service.sanctions(req.user,req.validated.params.userId,req.validated.query)),
