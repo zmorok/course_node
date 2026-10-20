@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
 import {InvitationComposer} from './InvitationPages.jsx';
 import { AvatarEditor,PortfolioPanel } from './PortfolioPanel.jsx';
+import {PasswordChange} from './PasswordChange.jsx';
 import {PublicReviews} from './Reviews.jsx';
 
 const fieldDefinitions = [
   ['firstName', 'Имя', 100, 'text', 'given-name'], ['lastName', 'Фамилия', 100, 'text', 'family-name'],
+  ['middleName','Отчество',100], ['gender','Пол',10],
   ['username', 'Имя пользователя', 40, 'text', 'username'], ['email', 'Email', 254, 'email', 'email'],
   ['headline', 'Специализация', 200], ['phone', 'Телефон', 30, 'tel', 'tel'],
   ['city', 'Город', 100, 'text', 'address-level2'], ['country', 'Страна', 100, 'text', 'country-name'],
@@ -17,7 +19,8 @@ const sameIds = (left, right) => left.length === right.length && left.every(id =
 function ProfileIdentity({ profile, children }) {
   return <>
     <div className="profile-avatar" aria-hidden="true">{profile.avatarFileId?<img src={`/api/files/${profile.avatarFileId}`} alt=""/>:<>{profile.firstName.slice(0, 1)}{profile.lastName.slice(0, 1)}</>}</div>
-    <h2>{profile.firstName} {profile.lastName}</h2>
+    <h2>{profile.firstName} {profile.middleName} {profile.lastName}</h2>
+    {profile.lastOnlineAt&&<p className="profile-help">Был(а) в сети: {new Date(profile.lastOnlineAt).toLocaleString('ru-RU')}</p>}
     <p className="profile-handle">@{profile.username}</p>
     {profile.headline && <p className="profile-headline">{profile.headline}</p>}
     {(profile.city || profile.country) && <p className="profile-location">{[profile.city, profile.country].filter(Boolean).join(', ')}</p>}
@@ -97,7 +100,7 @@ export function ProfilePage({ user, onUserChange }) {
             <fieldset disabled={busy}><div className="profile-fields">
               {fieldDefinitions.map(([name, label, max, type = 'text', complete]) => <div className={`field profile-field-${name}`} key={name}>
                 <label htmlFor={`profile-${name}`}>{label}</label>
-                {name === 'description' ? <textarea id={`profile-${name}`} name={name} rows={5} maxLength={max} value={draft[name]}
+                {name === 'gender' ? <select id={`profile-${name}`} value={draft[name]} onChange={event=>setDraft(previous=>({...previous,[name]:event.target.value}))}><option value="">Не указан</option><option value="Male">Мужской</option><option value="Female">Женский</option><option value="Other">Другой</option></select> : name === 'description' ? <textarea id={`profile-${name}`} name={name} rows={5} maxLength={max} value={draft[name]}
                   aria-invalid={fieldHasProblem(name)} aria-describedby={fieldHasProblem(name) ? `profile-${name}-error` : undefined}
                   onChange={event => { setDraft(previous => ({ ...previous, [name]: event.target.value })); setMessage(''); }} />
                   : <input id={`profile-${name}`} name={name} type={type} maxLength={max} autoComplete={complete}
@@ -132,7 +135,7 @@ export function ProfilePage({ user, onUserChange }) {
               <button type="button" className="secondary" disabled={!skillsDirty} onClick={() => { setSelected(savedIds); setSkillsError(null); setSkillsMessage(''); }}>Отменить выбор</button></div>
           </fieldset></form><p className="save-message" role="status">{skillsMessage}</p>
         </section>}
-        {isClient&&<PortfolioPanel userId={user.id} editable/>}
+        <PasswordChange/>{isClient&&<PortfolioPanel userId={user.id} editable/>}
       </div>
       <aside className="profile-card profile-summary" aria-label="Сохранённые данные профиля">
         <ProfileIdentity profile={profile}><span className="role-badge">{isClient ? 'Клиент' : 'Администратор'}</span></ProfileIdentity>

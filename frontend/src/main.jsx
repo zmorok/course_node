@@ -19,7 +19,7 @@ import {AuditPage} from './AuditPage.jsx';
 function App() {
   const [user, setUser] = useState(null);
   const [restoring, setRestoring] = useState(true);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(new URLSearchParams(window.location.search).has('passwordChanged')?'Пароль изменён. Войдите с новым паролем.':'');
   const [restoreFailed, setRestoreFailed] = useState(false);
   async function restore() {
     setRestoring(true); setRestoreFailed(false); setNotice('');
