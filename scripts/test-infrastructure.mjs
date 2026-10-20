@@ -211,8 +211,17 @@ try {
   assert.equal((await (await request(`${frontend}/api/users/${account.user.id}`)).json()).profile.customerRating,'4.50');
   assert.equal((await (await request(`${frontend}/api/me/reviews?mode=freelancer&direction=received`,{headers:authorHeaders})).json()).total,2);
   console.log('PASS: reciprocal reviews, server targets, author editing/hiding/restoration and database-backed role ratings through the proxy');
+  const evidenceText='Приватное доказательство жалобы';const evidenceForm=new FormData();evidenceForm.append('file',new Blob([evidenceText],{type:'text/plain'}),'Доказательство.txt');
+  const evidenceUpload=await request(`${frontend}/api/files`,{method:'POST',headers:{Authorization:authorHeaders.Authorization},body:evidenceForm});assert.equal(evidenceUpload.status,201);const evidence=(await evidenceUpload.json()).file;
+  const complaintResponse=await request(`${frontend}/api/orders/${agreement.id}/complaints`,{method:'POST',headers:authorHeaders,body:JSON.stringify({reason:'Проверка договорённостей',description:'Приватное обращение после завершения',fileIds:[evidence.id]})});assert.equal(complaintResponse.status,201);const complaint=(await complaintResponse.json()).complaint;assert.equal(complaint.target.id,account.user.id);
+  assert.equal((await request(`${frontend}/api/orders/${agreement.id}/complaints`,{method:'POST',headers:authorHeaders,body:JSON.stringify({reason:'Повтор',description:'Вторая жалоба'})})).status,409);
+  assert.equal((await request(`${frontend}/api/me/complaints/${complaint.id}`,{headers:authorization})).status,404);assert.equal((await request(`${frontend}/api/files/${evidence.id}`,{headers:authorization})).status,404);
+  console.log('PASS: immutable terminal-order complaint, server target, duplicate prevention and private evidence through the proxy');
   await compose('exec', '-T', 'backend', 'node', 'src/commands/promote-admin.js', account.user.email);
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 200);
+  const warningResponse=await request(`${frontend}/api/admin/users/${author.user.id}/warnings`,{method:'POST',headers:{...authHeaders,...authorization},body:JSON.stringify({message:'Соблюдайте правила общения'})});assert.equal(warningResponse.status,201);const warning=(await warningResponse.json()).warning;
+  assert.equal((await (await request(`${frontend}/api/me/warnings`,{headers:authorHeaders})).json()).items[0].warningId,warning.id);
+  console.log('PASS: admin-only warning issuance and private read-only warning history through the proxy');
   assert.equal((await request(`${frontend}/api/me/orders`,{headers:authorization})).status,403);
   console.log('PASS: registration, HttpOnly cookie, current user and CLIENT restriction through the frontend proxy');
 
@@ -277,6 +286,9 @@ try {
   const persistedReviews=await (await request(`${frontend}/api/users/${author.user.id}/reviews?mode=freelancer`)).json();assert.equal(persistedReviews.total,2);assert.equal(persistedReviews.rating,'3.50');assert(persistedReviews.items.some(row=>row.id===ownerReview.id&&row.text==='Обновлённый отзыв о результате'));
   assert.equal((await (await request(`${frontend}/api/orders/${agreement.id}/reviews`,{headers:authorHeaders})).json()).items.length,2);
   console.log('PASS: public reviews, private order feedback and recalculated ratings survive container replacement');
+  const restoredComplaint=await request(`${frontend}/api/me/complaints/${complaint.id}`,{headers:authorHeaders});assert.equal(restoredComplaint.status,200);assert.equal((await restoredComplaint.json()).complaint.status,'NEW');assert.equal(await (await request(`${frontend}/api/files/${evidence.id}`,{headers:authorHeaders})).text(),evidenceText);
+  assert.equal((await (await request(`${frontend}/api/me/warnings`,{headers:authorHeaders})).json()).items[0].warningId,warning.id);
+  console.log('PASS: submitted complaint, private evidence bytes and warning history survive container replacement');
   const restoredVersions=await (await request(`${frontend}/api/orders/${agreement.id}/submissions`,{headers:authorHeaders})).json();assert.equal(restoredVersions.total,2);assert.equal(restoredVersions.items[0].status,'ACCEPTED');assert.equal(restoredVersions.items[1].reviewComment,'Исправить замечания');assert.equal(restoredVersions.items[1].files[0].id,resultFile.id);assert.equal(await (await request(`${frontend}/api/files/${resultFile.id}`,{headers:authorHeaders})).text(),resultText);
   const restoredDeadlines=await (await request(`${frontend}/api/orders/${agreement.id}/deadline-requests`,{headers:authorHeaders})).json();assert.equal(restoredDeadlines.total,2);assert.equal(restoredDeadlines.items[0].status,'EXPIRED');assert.equal(restoredDeadlines.items[1].status,'APPROVED');
   console.log('PASS: versions, reviewer comments, private result bytes, deadline decisions and completed order/project survive container replacement');
