@@ -1,6 +1,6 @@
 # База данных Workify
 
-Схема PostgreSQL 17 реализует [предметную модель](domain-model.md) и [жизненные циклы](state-transitions.md). Все таблицы приложения находятся в схеме `workify`: 27 предметных таблиц, две таблицы авторизации и служебная `schema_migrations` (30 всего). SQL выполняется через `pg` в слое repositories/DAO; ORM не требуется.
+Схема PostgreSQL 17 реализует [предметную модель](domain-model.md) и [жизненные циклы](state-transitions.md). Все таблицы приложения находятся в схеме `workify`: 29 предметных таблиц, две таблицы авторизации и служебная `schema_migrations` (32 всего). SQL выполняется через `pg` в слое repositories/DAO; ORM не требуется.
 
 ## Миграции и воспроизводимая проверка
 
@@ -20,6 +20,8 @@ Host, user, port и пароль задаются стандартной кон�
 | [002](../database/migrations/002_indexes_and_views.sql) | Индексы выборок и пять представлений; в этой же транзакции применяется [справочный seed](../database/seeds/reference_data.sql) |
 | [003](../database/migrations/003_auth_sessions.sql) | Отзывные auth_sessions и хеши одноразовых refresh token; consumed_at сохраняется для обнаружения replay |
 | [004](../database/migrations/004_file_lifecycle.sql) | SHA-256 и durable deleted_at в stored_files для повторяемого удаления из volume; старые метаданные сохраняются |
+
+Миграции [005](../database/migrations/005_profile_parity.sql) — отчество, пол и публичное присутствие; [006](../database/migrations/006_portfolio_review_media.sql) — опыт/навыки работ и review_files; [007](../database/migrations/007_account_deletion.sql) — deleted_at аккаунта; [008](../database/migrations/008_audit_archive.sql) — неизменяемый импортированный архив.
 
 Применённые миграции не редактируются. Для последующих изменений добавляется следующая версия и её включение в migrate.sql. Миграции не выполняют DROP/TRUNCATE рабочих данных; откат изменения схемы оформляется отдельной осмысленной миграцией. Начальное создание схемы и журнала также транзакционно.
 
