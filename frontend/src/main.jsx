@@ -12,6 +12,7 @@ import {OrderListPage,OrderDetailsPage} from './OrderPages.jsx';
 import {MyReviewsPage} from './Reviews.jsx';
 import {ComplaintsPage,WarningsPage} from './Complaints.jsx';
 import {AdminPage} from './AdminPage.jsx';
+import {AuditPage} from './AuditPage.jsx';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -91,6 +92,7 @@ function App() {
           : ownReviews && user ? <MyReviewsPage key={user.id} user={user}/>
           : (ownComplaints || complaintMatch) && user ? <ComplaintsPage key={user.id} user={user} complaintId={complaintMatch?.[1]}/>
           : ownWarnings && user ? <WarningsPage key={user.id} user={user}/>
+          : /^\/admin\/audit\/?$/.test(window.location.pathname) && user ? <AuditPage key={user.id} user={user}/>
           : adminView && user ? <AdminPage key={user.id} user={user}/>
           : orderMatch && user ? <OrderDetailsPage key={user.id} user={user} orderId={orderMatch[1]}/>
           : newProject && user ? <ProjectEditorPage user={user}/>
