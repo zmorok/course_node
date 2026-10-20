@@ -35,6 +35,7 @@ export function createProfileService({ repository, transaction }) {
           const user = await repo.lockAccount(actor.id);
           requireActive(user);
           const { currentPassword, ...patch } = input;
+          const before=ownProfile(await repo.findOwn(actor.id));
           if (patch.email && patch.email.toLowerCase() !== user.email.toLowerCase()) {
             if (!currentPassword) throw new ValidationError([{ field: 'body.currentPassword', message: 'Для смены email нужен текущий пароль' }]);
             if (!await verifyPassword(user.password_hash, currentPassword)) {
@@ -45,7 +46,9 @@ export function createProfileService({ repository, transaction }) {
           }
           await repo.updateAccount(actor.id, patch);
           await repo.updateProfile(actor.id, patch);
-          return ownProfile(await repo.findOwn(actor.id));
+          const after=ownProfile(await repo.findOwn(actor.id)),fields=Object.keys(patch).filter(key=>JSON.stringify(before[key])!==JSON.stringify(after[key]));
+          if(fields.length)await repo.audit(actor.id,'PROFILE_UPDATED','user',actor.id,{fields},{oldData:Object.fromEntries(fields.map(key=>[key,before[key]])),newData:Object.fromEntries(fields.map(key=>[key,after[key]]))});
+          return after;
         });
       } catch (error) {
         if (error.code === '23505') throw new AppError(409, 'PROFILE_CONFLICT', 'Email или имя пользователя уже заняты');
@@ -60,7 +63,8 @@ export function createProfileService({ repository, transaction }) {
         if (user.role !== 'CLIENT') throw new AppError(403, 'FORBIDDEN', 'Навыки доступны аккаунту клиента');
         const existing = await repo.findSkillIds(ids);
         if (existing.length !== ids.length) throw new ValidationError([{ field: 'body.skillIds', message: 'Выберите навыки из справочника' }]);
-        await repo.replaceSkills(actor.id, ids);
+        const before=await repo.findOwn(actor.id);await repo.replaceSkills(actor.id, ids);
+        if(before.skills.length!==ids.length||ids.some(id=>!before.skills.some(skill=>skill.id===id)))await repo.audit(actor.id,'SKILLS_CHANGED','user',actor.id,{skillIds:ids});
         return ownProfile(await repo.findOwn(actor.id));
       });
     },

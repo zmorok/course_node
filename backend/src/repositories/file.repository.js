@@ -1,8 +1,10 @@
+import {createAuditRepository} from './audit.repository.js';
 // Keep every association here: a generic delete must respect future private contexts too.
 const references = ['profile_files', 'portfolio_files', 'project_files', 'order_files', 'submission_files', 'complaint_files'];
 const isUsed = alias => references.map(table => `EXISTS (SELECT 1 FROM workify.${table} r WHERE r.file_id = ${alias}.id)`).join(' OR ');
 export function createFileRepository(database) {
   return {
+    audit:createAuditRepository(database).audit,
     async lockActor(id) {
       return (await database.query('SELECT id, role, status, blocked_until FROM workify.users WHERE id=$1 FOR UPDATE', [id])).rows[0];
     },

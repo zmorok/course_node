@@ -1,3 +1,4 @@
+import {createAuditRepository} from './audit.repository.js';
 const activeCustomer = "u.role='CLIENT' AND (u.status='ACTIVE' OR u.blocked_until <= now())";
 const relations = `JOIN workify.users u ON u.id=p.customer_id JOIN workify.profiles profile ON profile.user_id=u.id
   LEFT JOIN workify.categories c ON c.id=p.category_id`;
@@ -12,6 +13,7 @@ const columns = `p.id,p.customer_id,p.category_id,p.title,p.description,p.budget
     FROM workify.project_files pf JOIN workify.stored_files f ON f.id=pf.file_id WHERE pf.project_id=p.id AND f.deleted_at IS NULL),'[]'::jsonb) AS files`;
 export function createProjectRepository(database) {
   return {
+    audit:createAuditRepository(database).audit,
     async categories() { return (await database.query('SELECT id,slug,name FROM workify.categories ORDER BY name,id')).rows; },
     async list(query, ownerId) {
       const values = [], conditions = [];
@@ -64,8 +66,8 @@ export function createProjectRepository(database) {
     async publish(id) { await database.query("UPDATE workify.projects SET status='OPEN',published_at=clock_timestamp() WHERE id=$1",[id]); },
     async cancel(id,reason) { await database.query("UPDATE workify.projects SET status='CANCELLED',cancelled_at=clock_timestamp(),cancellation_reason=$2 WHERE id=$1",[id,reason]); },
     async closePending(id,reason) {
-      await database.query("UPDATE workify.proposals SET status='REJECTED',decided_at=clock_timestamp(),closure_reason=$2 WHERE project_id=$1 AND status='PENDING'",[id,reason]);
-      await database.query("UPDATE workify.project_invitations SET status='EXPIRED',decided_at=clock_timestamp(),closure_reason=$2 WHERE project_id=$1 AND status='PENDING'",[id,reason]);
+      const proposals=(await database.query("UPDATE workify.proposals SET status='REJECTED',decided_at=clock_timestamp(),closure_reason=$2 WHERE project_id=$1 AND status='PENDING' RETURNING id,customer_id,freelancer_id",[id,reason])).rows;
+      const invitations=(await database.query("UPDATE workify.project_invitations SET status='EXPIRED',decided_at=clock_timestamp(),closure_reason=$2 WHERE project_id=$1 AND status='PENDING' RETURNING id,customer_id,freelancer_id",[id,reason])).rows;return {proposals,invitations};
     },
     async blockingOrder(id) { return (await database.query("SELECT 1 FROM workify.orders WHERE project_id=$1 AND status IN ('IN_PROGRESS','SUBMITTED','REVISION_REQUESTED','COMPLETED') LIMIT 1",[id])).rowCount>0; },
     async hasHistory(id) { return (await database.query(`SELECT EXISTS(SELECT 1 FROM workify.proposals WHERE project_id=$1)

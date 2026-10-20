@@ -24,7 +24,7 @@ export function createFileService({ repository, transaction, storage, logger = c
           requireFileActor(await repo.lockActor(actor.id));
           if (await repo.countOwn(actor.id) >= 50) throw new AppError(409, 'FILE_QUOTA', 'Можно хранить не более 50 файлов. Удалите ненужные');
           await storage.save(storageKey, input.buffer); saved = true;
-          return repo.insert(actor.id, { ...file, storageKey });
+          const row=await repo.insert(actor.id, { ...file, storageKey });await repo.audit(actor.id,'FILE_UPLOADED','file',row.id,{mimeType:row.mime_type,sizeBytes:Number(row.size_bytes)});return row;
         });
         return fileDto(row);
       } catch (error) {
@@ -48,6 +48,7 @@ export function createFileService({ repository, transaction, storage, logger = c
         if (!row || row.uploaded_by !== actor.id) throw fileMissing();
         if (await repo.used(id)) throw new AppError(409, 'FILE_IN_USE', 'Файл связан с сохранёнными данными. Удалить его нельзя');
         await repo.markUnusedDeleted([id]);
+        await repo.audit(actor.id,'FILE_REMOVED','file',id);
       });
       await service.drainDeletes();
     },
@@ -68,6 +69,7 @@ export function createFileService({ repository, transaction, storage, logger = c
         }
         await repo.setAvatar(actor.id, id);
         if (previous && previous !== id) await repo.markUnusedDeleted([previous]);
+        if(previous!==id)await repo.audit(actor.id,'AVATAR_CHANGED','user',actor.id,{}, {oldData:{avatarFileId:previous},newData:{avatarFileId:id}});
       });
       await service.drainDeletes();
       return id;

@@ -23,7 +23,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
     async register(input) {
       const passwordHash = await hashPassword(input.password);
       try {
-        return await transaction(async repo => {const user=await repo.createUser({ ...input, passwordHash });return issue(repo,user);});
+        return await transaction(async repo => {const user=await repo.createUser({ ...input, passwordHash });await repo.audit(user.id,'AUTH_REGISTERED','user',user.id);return issue(repo,user);});
       } catch (error) {
         if (error.code === '23505') throw new AppError(409, 'ACCOUNT_EXISTS', 'Email или имя пользователя уже заняты');
         throw error;
@@ -34,7 +34,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
       const matches = await verifyPassword(user?.password_hash ?? dummyHash, password);
       if (!user || !matches) throw new AppError(401, 'INVALID_CREDENTIALS', 'Неверный email или пароль');
       if (isBlocked(user)) throw blocked();
-      return transaction(async repo => {const current=await repo.lockForLogin(user.id);if(!current||current.email.toLowerCase()!==email.toLowerCase()||current.password_hash!==user.password_hash&&!await verifyPassword(current.password_hash,password))throw new AppError(401,'INVALID_CREDENTIALS','Неверный email или пароль');if(isBlocked(current))throw blocked();const result=await issue(repo,current);return result;});
+      return transaction(async repo => {const current=await repo.lockForLogin(user.id);if(!current||current.email.toLowerCase()!==email.toLowerCase()||current.password_hash!==user.password_hash&&!await verifyPassword(current.password_hash,password))throw new AppError(401,'INVALID_CREDENTIALS','Неверный email или пароль');if(isBlocked(current))throw blocked();const result=await issue(repo,current);await repo.audit(current.id,'AUTH_LOGIN','user',current.id);return result;});
     },
     async refresh(token) {
       if (!isRefreshToken(token)) throw unauthorized();
@@ -44,11 +44,13 @@ export async function createAuthService({ repository, transaction, accessTokens,
         if (!user || user.revoked_at || new Date(user.expires_at).getTime() <= Date.now()) return { error: unauthorized() };
         if (user.consumed_at || isBlocked(user)) {
           await repo.revokeSession(user.session_id);
+          await repo.audit(user.id,user.consumed_at?'AUTH_REFRESH_REPLAY':'AUTH_SESSION_REVOKED','user',user.id);
           return { error: isBlocked(user) ? blocked() : unauthorized() };
         }
         const refreshToken = newRefreshToken();
         await repo.consumeRefreshToken(digest);
         await repo.addRefreshToken(user.session_id, hashRefreshToken(refreshToken));
+        await repo.audit(user.id,'AUTH_REFRESHED','user',user.id);
         return { user: publicUser(user), accessToken: await accessTokens.sign(user.id, user.session_id), refreshToken, expiresAt: user.expires_at };
       });
       // Throw only after the revocation transaction commits.
@@ -64,7 +66,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
       return publicUser(user);
     },
     async logout(token) {
-      if(isRefreshToken(token))await transaction(async repo=>{const user=await repo.findRefreshForUpdate(hashRefreshToken(token));if(user&&!user.revoked_at){await repo.revokeSession(user.session_id);}});
+      if(isRefreshToken(token))await transaction(async repo=>{const user=await repo.findRefreshForUpdate(hashRefreshToken(token));if(user&&!user.revoked_at){await repo.revokeSession(user.session_id);await repo.audit(user.id,'AUTH_LOGOUT','user',user.id);}});
     },
   };
 }

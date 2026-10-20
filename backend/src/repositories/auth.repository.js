@@ -1,8 +1,10 @@
+import {createAuditRepository} from './audit.repository.js';
 const publicColumns = `u.id, u.email, u.username, u.role, u.status, u.blocked_until,
   p.first_name, p.last_name`;
 
 export function createAuthRepository(database) {
   return {
+    audit:createAuditRepository(database).audit,
     async findByEmail(email) {
       const result = await database.query(`SELECT ${publicColumns}, u.password_hash
         FROM workify.users u JOIN workify.profiles p ON p.user_id = u.id

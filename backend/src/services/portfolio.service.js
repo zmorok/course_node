@@ -26,6 +26,8 @@ export function createPortfolioService({ repository, transaction, fileService })
         if (id) await repo.update(id,input);
         await repo.replaceFiles(itemId,input.fileIds);
         await files.markUnusedDeleted(previousIds.filter(fileId => !input.fileIds.includes(fileId)));
+        const changed=!previous||['title','description','links'].some(key=>JSON.stringify(previous[key])!==JSON.stringify(input[key]))||previousIds.length!==input.fileIds.length||input.fileIds.some(fileId=>!previousIds.includes(fileId));
+        if(changed)await repo.audit(actor.id,id?'PORTFOLIO_UPDATED':'PORTFOLIO_CREATED','portfolio',itemId,{fileCount:input.fileIds.length});
         return dto(await repo.find(itemId,actor.id));
       });
       await fileService.drainDeletes(); return result;
@@ -37,6 +39,7 @@ export function createPortfolioService({ repository, transaction, fileService })
         if (!previous) throw missing();
         await repo.remove(id);
         await files.markUnusedDeleted(previous.files.map(file => file.id));
+        await repo.audit(actor.id,'PORTFOLIO_REMOVED','portfolio',id);
       });
       await fileService.drainDeletes();
     },
