@@ -1,3 +1,5 @@
+import {createNotificationRepository} from '../../src/repositories/notification.repository.js';
+import {createNotificationService} from '../../src/services/notification.service.js';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdtemp,rm} from 'node:fs/promises';
@@ -57,8 +59,9 @@ export async function marketplace(context,pool,config,{failEvent=()=>false,failW
   const complaintService=createComplaintService({repository:createComplaintRepository(pool),fileService,transaction:op=>withTransaction(pool,c=>{const repo=createComplaintRepository(c),audit=repo.audit;repo.audit=async(...args)=>{if(failComplaintAudit())throw new Error('injected complaint audit failure');return audit(...args);};return op(repo,createFileRepository(c));})});
   const warningService=createWarningService({repository:createWarningRepository(pool),transaction:op=>withTransaction(pool,c=>{const repo=createWarningRepository(c),audit=repo.audit;repo.audit=async(...args)=>{if(failWarningAudit())throw new Error('injected warning audit failure');return audit(...args);};return op(repo);})});
   const adminService=createAdminService({repository:createAdminRepository(pool),transaction:op=>withTransaction(pool,c=>{const repo=createAdminRepository(c),audit=repo.audit;repo.audit=async(...args)=>{if(failAdminAudit(args[1]))throw new Error('injected admin audit failure');return audit(...args);};return op(repo);})});
+  const notificationService=createNotificationService({repository:createNotificationRepository(pool)});
   const auditService=createAuditService({repository:createAuditRepository(pool)});
-  const app=await startApp(context,createApiRouter({authService,authConfig:config.auth,fileService,profileService,projectService,proposalService,freelancerService,invitationService,orderService,orderWorkService,reviewService,complaintService,warningService,adminService,auditService,healthService:{check:async()=>({status:'ok'})}}));
+  const app=await startApp(context,createApiRouter({authService,authConfig:config.auth,fileService,profileService,projectService,proposalService,freelancerService,invitationService,orderService,orderWorkService,reviewService,complaintService,warningService,adminService,auditService,notificationService,healthService:{check:async()=>({status:'ok'})}}));
   const api=(actor,path,method='GET',body)=>app.request(`/api${path}`,{method,headers:{...(actor?{Authorization:`Bearer ${actor.token}`}:{ }),'Content-Type':'application/json','X-Workify-Client':'browser'},...(body===undefined?{}:{body:JSON.stringify(body)})});
   return {...app,api,async register(patch={}){const suffix=randomUUID().replaceAll('-','');const result=await api(null,'/auth/register','POST',{email:`${suffix}@example.invalid`,username:`i_${suffix}`,firstName:'Участник',lastName:'Тест',password:'invitation test password',...patch});assert.equal(result.response.status,201);return {id:result.body.user.id,token:result.body.accessToken,user:result.body.user};},
     async project(owner,{file=false,draft=false}={}){let fileId;if(file){const form=new FormData();form.append('file',new Blob(['Задание по приглашению'],{type:'text/plain'}),'Задание.txt');const uploaded=await app.request('/api/files',{method:'POST',headers:{Authorization:`Bearer ${owner.token}`},body:form});assert.equal(uploaded.response.status,201);fileId=uploaded.body.file.id;}
