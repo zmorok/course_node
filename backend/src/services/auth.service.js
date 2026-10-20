@@ -14,6 +14,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
   // Unknown emails still perform the same password-hash verification.
   const dummyHash = await hashPassword(newRefreshToken());
   async function issue(repo, user) {
+    await repo.touchPresence(user.id);
     const refreshToken = newRefreshToken();
     const expiresAt = new Date(Date.now() + sessionTtlDays * 86400000);
     const session = await repo.createSession(user.id, expiresAt, hashRefreshToken(refreshToken));
@@ -47,7 +48,8 @@ export async function createAuthService({ repository, transaction, accessTokens,
           await repo.audit(user.id,user.consumed_at?'AUTH_REFRESH_REPLAY':'AUTH_SESSION_REVOKED','user',user.id);
           return { error: isBlocked(user) ? blocked() : unauthorized() };
         }
-        const refreshToken = newRefreshToken();
+        await repo.touchPresence(user.id);
+    const refreshToken = newRefreshToken();
         await repo.consumeRefreshToken(digest);
         await repo.addRefreshToken(user.session_id, hashRefreshToken(refreshToken));
         await repo.audit(user.id,'AUTH_REFRESHED','user',user.id);
@@ -63,6 +65,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
       const user = await repository.findCurrentUser(identity.sessionId, identity.userId);
       if (!user) throw unauthorized();
       if (isBlocked(user)) throw blocked();
+      await repository.touchPresence(user.id);
       return publicUser(user);
     },
     async logout(token) {

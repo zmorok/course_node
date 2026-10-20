@@ -53,4 +53,12 @@ SELECT NOT EXISTS (SELECT FROM workify.schema_migrations WHERE version = 4) AS a
     COMMIT;
 \endif
 
+SELECT NOT EXISTS (SELECT FROM workify.schema_migrations WHERE version = 5) AS apply_005 \gset
+\if :apply_005
+    BEGIN;
+    \ir migrations/005_profile_parity.sql
+    INSERT INTO workify.schema_migrations (version, name) VALUES (5, 'profile_parity');
+    COMMIT;
+\endif
+
 SELECT pg_advisory_unlock(173204, 2);
