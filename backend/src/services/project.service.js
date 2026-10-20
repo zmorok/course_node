@@ -17,7 +17,7 @@ function requireFuture(value) {
   if(value && new Date(value).getTime()<=Date.now()) throw new ValidationError([{field:'body.desiredDeadlineAt',message:'Желаемый срок должен быть в будущем'}]);
 }
 export function createProjectService({repository,transaction,fileService}) {
-  async function closeSources(repo,id,reason,actorId){const closed=await repo.closePending(id,reason);for(const [kind,rows,status] of [['proposal',closed.proposals,'REJECTED'],['invitation',closed.invitations,'EXPIRED']])for(const row of rows)await repo.audit(actorId,`${kind.toUpperCase()}_STATUS_CHANGED`,kind,row.id,{projectId:id,status,reason});}
+  async function closeSources(repo,id,reason,actorId){const closed=await repo.closePending(id,reason);for(const [kind,rows,status] of [['proposal',closed.proposals,'REJECTED'],['invitation',closed.invitations,'EXPIRED']])for(const row of rows){await repo.audit(actorId,`${kind.toUpperCase()}_STATUS_CHANGED`,kind,row.id,{projectId:id,status,reason});await repo.notifyClosed(row.freelancer_id,kind,row.id,id,status,reason);}}
   async function references(repo,input) {
     const valid=await repo.validReferences(input.categoryId,input.skillIds),issues=[];
     if(!valid.category)issues.push({field:'body.categoryId',message:'Выберите категорию из справочника'});

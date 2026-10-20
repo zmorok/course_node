@@ -1,3 +1,4 @@
+import {createNotificationRouter} from './notification.routes.js';
 import { Router } from 'express';
 import { createHealthRouter } from './health.routes.js';
 import { createAuthRouter } from './auth.routes.js';
@@ -15,7 +16,7 @@ import {createWarningRouter} from './warning.routes.js';
 import {createAdminRouter} from './admin.routes.js';
 import {createAuditRouter} from './audit.routes.js';
 
-export function createApiRouter({ healthService, authService, authConfig, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService, adminService, auditService }) {
+export function createApiRouter({ healthService, authService, authConfig, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService, adminService, auditService, notificationService }) {
   const router = Router();
   router.use(createHealthRouter(healthService));
   if (authService) router.use(createAuthRouter(authService, authConfig));
@@ -32,5 +33,6 @@ export function createApiRouter({ healthService, authService, authConfig, profil
   if(warningService)router.use(createWarningRouter(warningService,authService));
   if(adminService)router.use(createAdminRouter(adminService,authService));
   if(auditService)router.use(createAuditRouter(auditService,authService));
+  if(notificationService)router.use(createNotificationRouter(notificationService,authService));
   return router;
 }
