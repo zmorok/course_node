@@ -1,0 +1,30 @@
+import test,{after} from 'node:test';
+import assert from 'node:assert/strict';
+import {loadConfig} from '../../src/config/env.js';
+import {createDatabasePool} from '../../src/config/database.js';
+import {marketplace} from '../helpers/marketplace.js';
+if(process.env.WORKIFY_DB_TESTS!=='1')throw new Error('Use the disposable infrastructure database');
+const config=loadConfig({...process.env,NODE_ENV:'test'}),pool=createDatabasePool(config.database);after(()=>pool.end());
+const expect=(value,status)=>{assert.equal(value.response.status,status,JSON.stringify(value.body));return value.body;};
+test('profile parity persists middle name gender and presence without exposing contacts',async context=>{
+ const app=await marketplace(context,pool,config),actor=await app.register();
+ const own=expect(await app.api(actor,'/me/profile','PATCH',{middleName:'Сергеевич',gender:'Male'}),200).profile;
+ assert.equal(own.middleName,'Сергеевич');assert.equal(own.gender,'Male');assert(own.lastOnlineAt);
+ const visible=expect(await app.api(null,`/users/${actor.id}`),200).profile;
+ assert.equal(visible.middleName,'Сергеевич');assert.equal(visible.gender,'Male');assert(visible.lastOnlineAt);assert(!('email' in visible));
+ expect(await app.api(actor,'/me/profile','PATCH',{gender:'invalid'}),422);
+ const cleared=expect(await app.api(actor,'/me/profile','PATCH',{middleName:'',gender:''}),200).profile;assert.equal(cleared.middleName,null);assert.equal(cleared.gender,null);
+});
+test('password change verifies current password revokes every session and never audits secrets',async context=>{
+ const app=await marketplace(context,pool,config),actor=await app.register(),current='invitation test password',next='changed parity password';
+ const second=expect(await app.api(null,'/auth/login','POST',{email:actor.user.email,password:current}),200);
+ expect(await app.api(actor,'/me/password','POST',{currentPassword:'wrong',newPassword:next}),403);
+ expect(await app.api(actor,'/me/password','POST',{currentPassword:current,newPassword:'short'}),422);
+ expect(await app.api(actor,'/me/password','POST',{currentPassword:current,newPassword:current}),422);
+ expect(await app.api(actor,'/me/password','POST',{currentPassword:current,newPassword:next}),200);
+ expect(await app.api(actor,'/auth/me'),401);expect(await app.api({token:second.accessToken},'/auth/me'),401);
+ expect(await app.api(null,'/auth/login','POST',{email:actor.user.email,password:current}),401);
+ expect(await app.api(null,'/auth/login','POST',{email:actor.user.email,password:next}),200);
+ const rows=(await pool.query("SELECT * FROM workify.audit_logs WHERE actor_id=$1 AND action='PASSWORD_CHANGED'",[actor.id])).rows;
+ assert.equal(rows.length,1);assert(!JSON.stringify(rows).includes(current));assert(!JSON.stringify(rows).includes(next));
+});
