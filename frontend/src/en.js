@@ -1096,3 +1096,5 @@ Object.assign(english,{
   "Тестирование": "Testing",
   "Автоматизация": "Automation"
 });
+
+Object.assign(english,{"Автоматизированное тестирование":"Automated testing","Проектирование API":"API design"});
