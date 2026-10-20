@@ -17,6 +17,7 @@ function requireFuture(value) {
   if(value && new Date(value).getTime()<=Date.now()) throw new ValidationError([{field:'body.desiredDeadlineAt',message:'Желаемый срок должен быть в будущем'}]);
 }
 export function createProjectService({repository,transaction,fileService}) {
+  async function closeSources(repo,id,reason,actorId){const closed=await repo.closePending(id,reason);for(const [kind,rows,status] of [['proposal',closed.proposals,'REJECTED'],['invitation',closed.invitations,'EXPIRED']])for(const row of rows)await repo.audit(actorId,`${kind.toUpperCase()}_STATUS_CHANGED`,kind,row.id,{projectId:id,status,reason});}
   async function references(repo,input) {
     const valid=await repo.validReferences(input.categoryId,input.skillIds),issues=[];
     if(!valid.category)issues.push({field:'body.categoryId',message:'Выберите категорию из справочника'});
@@ -47,9 +48,10 @@ export function createProjectService({repository,transaction,fileService}) {
     const changed=['title','description','categoryId','budget','desiredDeadlineAt'].some(key=>before[key]!==next[key])
       || !sameIds(beforeSkills,next.skillIds) || !sameIds(beforeFiles,next.fileIds);
     if(changed) {
-      if(row.status==='OPEN')await repo.closePending(row.id,'TERMS_CHANGED');
+      if(row.status==='OPEN')await closeSources(repo,row.id,'TERMS_CHANGED',actor.id);
       await repo.update(row.id,next);await repo.replaceSkills(row.id,next.skillIds);await repo.replaceFiles(row.id,next.fileIds);
       await files.markUnusedDeleted(beforeFiles.filter(id=>!next.fileIds.includes(id)));
+      const fields=Object.keys(before).filter(key=>JSON.stringify(before[key])!==JSON.stringify(next[key]));await repo.audit(actor.id,'PROJECT_UPDATED','project',row.id,{fields},{oldData:Object.fromEntries(fields.map(key=>[key,before[key]])),newData:Object.fromEntries(fields.map(key=>[key,next[key]]))});
     }
     return dto(await repo.findVisible(row.id,actor.id),actor);
   }
@@ -67,6 +69,7 @@ export function createProjectService({repository,transaction,fileService}) {
         if(await repo.countOwn(actor.id)>=100)throw new AppError(409,'PROJECT_QUOTA','Можно создать не более 100 проектов');
         await references(repo,input);await fileService.attachable(files,actor.id,input.fileIds);
         const id=await repo.insert(actor.id,input);await repo.replaceSkills(id,input.skillIds);await repo.replaceFiles(id,input.fileIds);
+        await repo.audit(actor.id,'PROJECT_CREATED','project',id,{status:'DRAFT'},{newData:{title:input.title,budget:input.budget,status:'DRAFT'}});
         return dto(await repo.findVisible(id,actor.id),actor);
       });
     },
@@ -74,15 +77,16 @@ export function createProjectService({repository,transaction,fileService}) {
     async publish(actor,id){return ownOperation(actor,id,async(repo,_files,row)=>{
       if(row.status!=='DRAFT')throw conflict();await mutable(repo,row);
       if(!row.description.trim() || !row.category_id)throw new ValidationError([{field:'body',message:'Для публикации заполните описание и категорию'}]);
-      requireFuture(row.desired_deadline_at);await repo.publish(id);return dto(await repo.findVisible(id,actor.id),actor);
+      requireFuture(row.desired_deadline_at);await repo.publish(id);await repo.audit(actor.id,'PROJECT_PUBLISHED','project',id,{}, {oldData:{status:'DRAFT'},newData:{status:'OPEN'}});return dto(await repo.findVisible(id,actor.id),actor);
     });},
     async cancel(actor,id,reason){return ownOperation(actor,id,async(repo,_files,row)=>{
-      await mutable(repo,row);await repo.closePending(id,'PROJECT_CANCELLED');await repo.cancel(id,reason);
+      await mutable(repo,row);await closeSources(repo,id,'PROJECT_CANCELLED',actor.id);await repo.cancel(id,reason);await repo.audit(actor.id,'PROJECT_CANCELLED','project',id,{reason},{oldData:{status:row.status},newData:{status:'CANCELLED'}});
       return dto(await repo.findVisible(id,actor.id),actor);
     });},
     async remove(actor,id){return ownOperation(actor,id,async(repo,files,row)=>{
       if(row.status!=='DRAFT' || await repo.hasHistory(id))throw conflict();
       const ids=await repo.files(id);await repo.remove(id);await files.markUnusedDeleted(ids);
+      await repo.audit(actor.id,'PROJECT_REMOVED','project',id,{}, {oldData:{title:row.title,status:row.status}});
     });},
     async attachFile(actor,id,fileId){return ownOperation(actor,id,async(repo,files,row)=>{
       const ids=await repo.files(id);

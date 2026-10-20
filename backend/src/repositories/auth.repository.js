@@ -1,14 +1,17 @@
+import {createAuditRepository} from './audit.repository.js';
 const publicColumns = `u.id, u.email, u.username, u.role, u.status, u.blocked_until,
   p.first_name, p.last_name`;
 
 export function createAuthRepository(database) {
   return {
+    audit:createAuditRepository(database).audit,
     async findByEmail(email) {
       const result = await database.query(`SELECT ${publicColumns}, u.password_hash
         FROM workify.users u JOIN workify.profiles p ON p.user_id = u.id
         WHERE lower(u.email) = lower($1)`, [email]);
       return result.rows[0];
     },
+    async lockForLogin(id){return (await database.query(`SELECT ${publicColumns},u.password_hash FROM workify.users u JOIN workify.profiles p ON p.user_id=u.id WHERE u.id=$1 FOR UPDATE OF u`,[id])).rows[0];},
     async promoteToAdmin(email) {
       return (await database.query("UPDATE workify.users SET role = 'ADMIN' WHERE lower(email) = lower($1) RETURNING id", [email])).rows[0];
     },
@@ -31,6 +34,9 @@ export function createAuthRepository(database) {
       await database.query(`INSERT INTO workify.auth_refresh_tokens (session_id, token_hash) VALUES ($1, $2)`, [sessionId, tokenHash]);
     },
     async findRefreshForUpdate(tokenHash) {
+      // Match moderation/profile ordering: user, then session, then audit foreign keys.
+      await database.query(`SELECT u.id FROM workify.users u JOIN workify.auth_sessions s ON s.user_id=u.id
+        WHERE s.id=(SELECT session_id FROM workify.auth_refresh_tokens WHERE token_hash=$1) FOR UPDATE OF u`,[tokenHash]);
       // Serialize every rotation in a session, including replayed old tokens.
       const user = (await database.query(`SELECT ${publicColumns}, s.id AS session_id,
         s.expires_at, s.revoked_at FROM workify.auth_sessions s

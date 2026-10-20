@@ -1,3 +1,4 @@
+import {createAuditRepository} from './audit.repository.js';
 const skills = `COALESCE((SELECT jsonb_agg(jsonb_build_object('id', s.id, 'slug', s.slug, 'name', s.name)
   ORDER BY s.name, s.id) FROM workify.user_skills us JOIN workify.skills s ON s.id = us.skill_id
   WHERE us.user_id = p.user_id), '[]'::jsonb) AS skills`;
@@ -13,6 +14,7 @@ export function createProfileRepository(database) {
       values: entries.map(([key]) => input[key]) };
   }
   return {
+    audit:createAuditRepository(database).audit,
     async findOwn(userId) {
       return (await database.query(`SELECT u.id, u.email, u.username, p.first_name, p.last_name,
         p.headline, p.description, p.phone, p.city, p.country, p.created_at, p.updated_at,

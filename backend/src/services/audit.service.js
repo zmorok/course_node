@@ -1,0 +1,3 @@
+import {requireAdmin} from './admin-policy.js';
+import {auditData} from '../utils/audit-data.js';
+export function createAuditService({repository}){return {async list(actor,query){requireAdmin(actor);const data=await repository.list(query);return {...data,items:data.items.map(row=>({id:row.id,actor:row.actor_id?{id:row.actor_id,username:row.username,firstName:row.first_name,lastName:row.last_name}:null,action:row.action,entityType:row.entity_type,entityId:row.entity_id,createdAt:row.created_at,metadata:auditData(row.metadata),oldData:auditData(row.old_data),newData:auditData(row.new_data),ip:row.ip_address})),page:query.page,pageSize:query.pageSize};}};}

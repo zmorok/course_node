@@ -91,7 +91,7 @@ export function ProfilePage({ user, onUserChange }) {
     <div className="profile-layout">
       <div className="profile-editor">
         <section className="profile-card" aria-labelledby="profile-data-title">
-          <h2 id="profile-data-title">Личные данные</h2><p className="profile-help">Email и телефон видны только вам. Для смены email потребуется текущий пароль.</p>
+          <h2 id="profile-data-title">Личные данные</h2><p className="profile-help">Email и телефон скрыты в публичном профиле. Для смены email потребуется текущий пароль.</p>
           <Problems problem={profileError} />
           <form onSubmit={saveProfile}>
             <fieldset disabled={busy}><div className="profile-fields">

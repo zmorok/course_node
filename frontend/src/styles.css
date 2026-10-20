@@ -319,6 +319,7 @@ select:focus { outline:2px solid #507d64;outline-offset:2px; }
 .admin-action-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px; }
 .admin-action-grid>* { min-width:0; }
 .admin-action-grid h3 { overflow-wrap:anywhere; }
+.audit-details pre { white-space:pre-wrap;overflow-wrap:anywhere;max-width:100%;font-size:12px;line-height:1.7;background:#f6f7f2;padding:16px;border-radius:8px; }
 .invitation-tabs button[aria-pressed=true] { border-bottom:2px solid #477456; }
 @media(max-width:800px) { .admin-filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .admin-action-grid { grid-template-columns:1fr; } }
 @media(max-width:480px) { .admin-filters { grid-template-columns:1fr; } }

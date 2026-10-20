@@ -1,3 +1,4 @@
+import {createAuditRepository} from './audit.repository.js';
 const columns = `i.id,i.user_id,i.title,i.description,i.links,i.created_at,i.updated_at,
   COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'originalName',f.original_name,'mimeType',f.mime_type,
     'sizeBytes',f.size_bytes,'sha256',f.sha256,'createdAt',f.created_at) ORDER BY f.created_at,f.id)
@@ -5,6 +6,7 @@ const columns = `i.id,i.user_id,i.title,i.description,i.links,i.created_at,i.upd
     WHERE pf.portfolio_item_id=i.id AND f.deleted_at IS NULL), '[]'::jsonb) AS files`;
 export function createPortfolioRepository(database) {
   return {
+    audit:createAuditRepository(database).audit,
     async list(userId) { return (await database.query(`SELECT ${columns} FROM workify.portfolio_items i WHERE user_id=$1 ORDER BY created_at DESC,id`,[userId])).rows; },
     async publicUser(userId) { return (await database.query('SELECT user_id FROM workify.v_public_profiles WHERE user_id=$1',[userId])).rows[0]; },
     async find(id,userId,lock=false) {
