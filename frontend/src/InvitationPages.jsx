@@ -1,3 +1,4 @@
+import {ErrorMessage} from './Ui.jsx';
 import React,{useEffect,useState} from 'react';
 import {api} from './api.js';
 import {Agreement} from './ProposalPages.jsx';
@@ -5,7 +6,6 @@ const statuses={PENDING:'Ожидает ответа',ACCEPTED:'Принято',
 const reasons={RECIPIENT_DECLINED:'Исполнитель отклонил приглашение',TERMS_CHANGED:'Условия проекта изменились',PROJECT_CANCELLED:'Проект отменён',OTHER_SOURCE_ACCEPTED:'На проект выбран исполнитель',TERMS_EXPIRED:'Предложенный срок работы истёк',TIME_EXPIRED:'Срок ответа истёк'};
 const date=value=>value?new Date(value).toLocaleString('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}):'Не ограничен';
 const price=value=>value===null?'Не указана':new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value));
-function ErrorMessage({error}){return error?<div className="form-error" role="alert">{error.message}{error.details?.map(issue=><small key={issue.field}>{issue.message}</small>)}</div>:null;}
 const localDate=value=>value?new Date(new Date(value).getTime()-new Date(value).getTimezoneOffset()*60000).toISOString().slice(0,16):'';
 
 export function InvitationComposer({profile,user}){

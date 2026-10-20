@@ -1,3 +1,4 @@
+import {Pagination as CommonPagination,ErrorMessage} from './Ui.jsx';
 import React,{useEffect,useState} from 'react';
 import {api} from './api.js';
 import {uploadFile} from './files.js';
@@ -7,8 +8,7 @@ const submissionStatuses={SUBMITTED:'На проверке',REVISION_REQUESTED:'
 const deadlineStatuses={PENDING:'Ожидает решения',APPROVED:'Одобрен',REJECTED:'Отклонён',EXPIRED:'Закрыт'};
 const reasons={ORDER_SUBMITTED:'Работа передана на проверку',ORDER_COMPLETED:'Заказ завершён',ORDER_CANCELLED:'Заказ отменён',TIME_EXPIRED:'Предложенная дата уже прошла',DEADLINE_CHANGED:'Исходный срок изменился'};
 const emptySubmission=()=>({comment:'',links:'',files:[]});
-function ErrorMessage({error}){return error?<div className="form-error" role="alert">{error.message}{error.details?.map(issue=><small key={issue.field}>{issue.message}</small>)}</div>:null;}
-function Pages({data,page,setPage,label,disabled}){return data?.total>data?.pageSize?<nav className="project-pagination" aria-label={label}>{page>1&&<button className="text-button" disabled={disabled} onClick={()=>setPage(page-1)}>← Назад</button>}<span>Страница {page} из {Math.ceil(data.total/data.pageSize)}</span>{page*data.pageSize<data.total&&<button className="text-button" disabled={disabled} onClick={()=>setPage(page+1)}>Далее →</button>}</nav>:null;}
+function Pages({data,page,setPage,label,disabled}){return data?<CommonPagination data={data} page={page} onPage={setPage} label={label} disabled={disabled}/>:null;}
 export function OrderWorkPanel({order,onChange}){
   const path=`/orders/${order.id}`;
   const [submissions,setSubmissions]=useState(null),[deadlines,setDeadlines]=useState(null),[loading,setLoading]=useState(true),[loadError,setLoadError]=useState(null),[attempt,setAttempt]=useState(0),[submissionPage,setSubmissionPage]=useState(1),[deadlinePage,setDeadlinePage]=useState(1);

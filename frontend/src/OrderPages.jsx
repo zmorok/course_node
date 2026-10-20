@@ -1,3 +1,4 @@
+import {Pagination,ErrorMessage,StatusBadge} from './Ui.jsx';
 import React,{useEffect,useState} from 'react';
 import {api} from './api.js';
 import {FileLink} from './PortfolioPanel.jsx';
@@ -11,9 +12,8 @@ const active=['IN_PROGRESS','SUBMITTED','REVISION_REQUESTED'];
 const price=value=>value===null?'Цена не указана':new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}).format(Number(value));
 const date=value=>value?new Date(value).toLocaleString('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}):'Не указан';
 const modeName=mode=>mode==='customer'?'Как заказчик':'Как исполнитель';
-function ErrorMessage({error}){return error?<div className="form-error" role="alert">{error.message}{error.details?.map(issue=><small key={issue.field}>{issue.message}</small>)}</div>:null;}
 function ClientOnly(){return <section className="profile-card"><h1>Заказы доступны клиенту</h1><p className="profile-help">Режим заказчика или исполнителя определяется участием в конкретном заказе.</p><a className="text-link" href="/projects">Каталог проектов</a></section>;}
-function OrderBadges({order}){return <div className="project-card-top"><span className={`project-status status-${order.status.toLowerCase()}`}>{statuses[order.status]}</span><span className="order-mode">{modeName(order.participantMode)}</span>{order.isOverdue&&<span className="order-overdue">Срок истёк</span>}</div>;}
+function OrderBadges({order}){return <div className="project-card-top"><StatusBadge status={order.status} labels={statuses}/><span className="order-mode">{modeName(order.participantMode)}</span>{order.isOverdue&&<span className="order-overdue">Срок истёк</span>}</div>;}
 function OrderCard({order}){
   const counterpart=order.participantMode==='customer'?order.freelancer:order.customer;
   return <article className="profile-card order-card"><OrderBadges order={order}/><h2><a href={`/orders/${order.id}`}>{order.title}</a></h2><p className="order-person">{order.participantMode==='customer'?'Исполнитель':'Заказчик'}: <a className="text-link" href={`/users/${counterpart.id}`}>{counterpart.firstName} {counterpart.lastName}</a></p>
@@ -35,7 +35,7 @@ export function OrderListPage({user}){
     <section className="project-results" aria-label={scope==='history'?'История заказов':'Активные заказы'}>{loading?<div className="profile-card" role="status">Загружаем заказы…</div>:error?<div className="profile-card"><ErrorMessage error={error}/><button className="secondary" onClick={()=>setAttempt(value=>value+1)}>Повторить загрузку</button><a className="text-link" href="/me/orders">К списку заказов</a></div>:<>
       <p className="project-result-count" role="status">Найдено заказов: {data.total}</p>{data.items.map(order=><OrderCard key={order.id} order={order}/>)}
       {!data.items.length&&<div className="profile-card project-empty"><h2>{data.total?'На этой странице заказов нет':filtered?'Заказов с таким статусом нет':scope==='history'?'История пока пуста':'Активных заказов пока нет'}</h2><p className="profile-help">{data.total?'Вернитесь на предыдущую страницу.':filtered?'Выберите другой статус или покажите все заказы этого раздела.':scope==='history'?'Здесь сохраняются завершённые и отменённые заказы.':mode==='customer'?'Выберите исполнителя через отклик или приглашение, чтобы начать работу.':'Заказ появится после принятия вашего отклика или приглашения заказчика.'}</p><a className="text-link" href={data.total?listUrl(mode,scope):filtered?listUrl(mode,scope,1,''):mode==='customer'?'/me/projects':'/projects'}>{data.total?'Первая страница':filtered?'Показать все заказы':'Перейти к проектам ↗'}</a></div>}
-      {data.total>0&&<nav className="project-pagination" aria-label="Страницы заказов">{data.page>1&&<a href={listUrl(mode,scope,data.page-1)}>← Назад</a>}<span>Страница {data.page} из {Math.ceil(data.total/data.pageSize)}</span>{data.page*data.pageSize<data.total&&<a href={listUrl(mode,scope,data.page+1)}>Далее →</a>}</nav>}
+      <Pagination data={data} href={page=>listUrl(mode,scope,page)} label="Страницы заказов"/>
     </>}</section></>;
 }
 
