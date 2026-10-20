@@ -1,19 +1,20 @@
-import { t, locale } from "./i18n.js";import React, { useEffect, useState } from 'react';
+import { Link } from './Navigation.jsx';
+import { uiMessage, t, locale } from "./i18n.js";import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { InvitationComposer } from './InvitationPages.jsx';
 import { AvatarEditor, PortfolioPanel } from './PortfolioPanel.jsx';
 import { PasswordChange } from './PasswordChange.jsx';
 import { PublicReviews } from './Reviews.jsx';
 
-const fieldDefinitions = [
+const fieldDefinitions = () => ([
 ['firstName', t("Имя"), 100, 'text', 'given-name'], ['lastName', t("Фамилия"), 100, 'text', 'family-name'],
 ['middleName', t("Отчество"), 100], ['gender', t("Пол"), 10],
 ['username', t("Имя пользователя"), 40, 'text', 'username'], ['email', 'Email', 254, 'email', 'email'],
 ['headline', t("Специализация"), 200], ['phone', t("Телефон"), 30, 'tel', 'tel'],
 ['city', t("Город"), 100, 'text', 'address-level2'], ['country', t("Страна"), 100, 'text', 'country-name'],
-['description', t("О себе"), 5000]];
+['description', t("О себе"), 5000]]);
 
-const asForm = (profile) => Object.fromEntries(fieldDefinitions.map(([name]) => [name, profile[name] ?? '']));
+const asForm = (profile) => Object.fromEntries(fieldDefinitions().map(([name]) => [name, profile[name] ?? '']));
 const sameIds = (left, right) => left.length === right.length && left.every((id) => right.includes(id));
 
 function ProfileIdentity({ profile, children }) {
@@ -28,11 +29,11 @@ function ProfileIdentity({ profile, children }) {
   </>;
 }
 function Problems({ problem }) {
-  return problem ? <div className="form-error" role="alert">{problem.message}</div> : null;
+  return problem ? <div className="form-error" role="alert">{t(problem.message)}</div> : null;
 }
 function FieldProblem({ problem, name }) {
   const issue = problem?.details?.find((item) => item.field === `body.${name}`);
-  return issue ? <small className="field-error" id={`profile-${name}-error`}>{issue.message}</small> : null;
+  return issue ? <small className="field-error" id={`profile-${name}-error`}>{t(issue.message)}</small> : null;
 }
 
 export function ProfilePage({ user, onUserChange }) {
@@ -59,7 +60,7 @@ export function ProfilePage({ user, onUserChange }) {
   if (loading) return <div className="profile-card" role="status">{t("Загружаем профиль…")}</div>;
   if (loadError) return <section className="profile-card"><h1>{t("Не удалось открыть профиль")}</h1><Problems problem={loadError} /><button onClick={() => setAttempt((value) => value + 1)}>{t("Повторить")}</button></section>;
   const original = asForm(profile);
-  const dirty = fieldDefinitions.some(([name]) => draft[name] !== original[name]);
+  const dirty = fieldDefinitions().some(([name]) => draft[name] !== original[name]);
   const skillsDirty = !sameIds(selected, savedIds);
   const emailChanged = draft.email.toLowerCase().trim() !== profile.email.toLowerCase();
   const busy = saving || savingSkills;
@@ -67,11 +68,11 @@ export function ProfilePage({ user, onUserChange }) {
   const fieldHasProblem = (name) => Boolean(profileError?.details?.some((item) => item.field === `body.${name}`));
   async function saveProfile(event) {
     event.preventDefault();setSaving(true);setProfileError(null);setMessage('');
-    const body = Object.fromEntries(fieldDefinitions.filter(([name]) => draft[name] !== original[name]).map(([name]) => [name, draft[name]]));
+    const body = Object.fromEntries(fieldDefinitions().filter(([name]) => draft[name] !== original[name]).map(([name]) => [name, draft[name]]));
     if (emailChanged) body.currentPassword = currentPassword;
     try {
       const result = await api('/me/profile', { method: 'PATCH', body });
-      setProfile(result.profile);setDraft(asForm(result.profile));setCurrentPassword('');setMessage(t("Профиль сохранён"));
+      setProfile(result.profile);setDraft(asForm(result.profile));setCurrentPassword('');setMessage(uiMessage("Профиль сохранён"));
       onUserChange({ ...user, email: result.profile.email, username: result.profile.username,
         firstName: result.profile.firstName, lastName: result.profile.lastName });
     } catch (error) {setProfileError(error);} finally
@@ -83,14 +84,14 @@ export function ProfilePage({ user, onUserChange }) {
       const result = await api('/me/skills', { method: 'PUT', body: { skillIds: selected } });
       const ids = result.profile.skills.map((skill) => skill.id);
       setSelected(ids);setSavedIds(ids);setProfile((previous) => ({ ...previous, skills: result.profile.skills }));
-      setSkillsMessage(t("Навыки сохранены"));
+      setSkillsMessage(uiMessage("Навыки сохранены"));
     } catch (error) {setSkillsError(error);} finally
     {setSavingSkills(false);}
   }
   return <>
     <div className="profile-page-heading"><div><p className="eyebrow">{t("Ваше рабочее пространство")}</p><h1>{isClient ? t("Мой профиль") : t("Профиль аккаунта")}</h1>
       <p className="profile-subtitle">{isClient ? t("Расскажите о себе и выберите навыки для будущих проектов.") : t("Ваши персональные и контактные данные.")}</p></div>
-      <a className="text-link" href="/">{t("← К аккаунту")}</a></div>
+      <Link className="text-link" href="/">{t("← К аккаунту")}</Link></div>
     <div className="profile-layout">
       <div className="profile-editor">
         <section className="profile-card" aria-labelledby="profile-data-title">
@@ -98,7 +99,7 @@ export function ProfilePage({ user, onUserChange }) {
           <Problems problem={profileError} />
           <form onSubmit={saveProfile}>
             <fieldset disabled={busy}><div className="profile-fields">
-              {fieldDefinitions.map(([name, label, max, type = 'text', complete]) => <div className={`field profile-field-${name}`} key={name}>
+              {fieldDefinitions().map(([name, label, max, type = 'text', complete]) => <div className={`field profile-field-${name}`} key={name}>
                 <label htmlFor={`profile-${name}`}>{label}</label>
                 {name === 'gender' ? <select id={`profile-${name}`} value={draft[name]} onChange={(event) => setDraft((previous) => ({ ...previous, [name]: event.target.value }))}><option value="">{t("Не указан")}</option><option value="Male">{t("Мужской")}</option><option value="Female">{t("Женский")}</option><option value="Other">{t("Другой")}</option></select> : name === 'description' ? <textarea id={`profile-${name}`} name={name} rows={5} maxLength={max} value={draft[name]}
                   aria-invalid={fieldHasProblem(name)} aria-describedby={fieldHasProblem(name) ? `profile-${name}-error` : undefined}
@@ -121,7 +122,7 @@ export function ProfilePage({ user, onUserChange }) {
               <button type="submit" disabled={!dirty}>{saving ? t("Сохраняем…") : t("Сохранить профиль")}</button>
               <button type="button" className="secondary" disabled={!dirty} onClick={() => {setDraft(original);setCurrentPassword('');setProfileError(null);setMessage('');}}>{t("Отменить изменения")}</button>
             </div></fieldset>
-          </form><p className="save-message" role="status">{message}</p>
+          </form><p className="save-message" role="status">{t(message)}</p>
         </section>
         {isClient && <section className="profile-card" aria-labelledby="profile-skills-title">
           <div className="skills-heading"><div><h2 id="profile-skills-title">{t("Навыки")}</h2><p className="profile-help">{t("Выберите технологии, с которыми вы работаете.")}</p></div><span className="skills-count">{selected.length} / 50</span></div>
@@ -133,7 +134,7 @@ export function ProfilePage({ user, onUserChange }) {
             {!filtered.length && <p className="profile-help">{t("Навыки не найдены. Попробуйте другое название.")}</p>}
             <div className="profile-form-actions"><button type="submit" disabled={!skillsDirty}>{savingSkills ? t("Сохраняем…") : t("Сохранить навыки")}</button>
               <button type="button" className="secondary" disabled={!skillsDirty} onClick={() => {setSelected(savedIds);setSkillsError(null);setSkillsMessage('');}}>{t("Отменить выбор")}</button></div>
-          </fieldset></form><p className="save-message" role="status">{skillsMessage}</p>
+          </fieldset></form><p className="save-message" role="status">{t(skillsMessage)}</p>
         </section>}
         <PasswordChange />{isClient && <PortfolioPanel userId={user.id} editable />}
       </div>
@@ -141,7 +142,7 @@ export function ProfilePage({ user, onUserChange }) {
         <ProfileIdentity profile={profile}><span className="role-badge">{isClient ? t("Клиент") : t("Администратор")}</span></ProfileIdentity>
         {isClient && <AvatarEditor fileId={profile.avatarFileId} onChange={(avatarFileId) => setProfile((previous) => ({ ...previous, avatarFileId }))} />}
         {isClient && <><div className="profile-tags">{profile.skills.map((skill) => <span key={skill.id}>{t(skill.name)}</span>)}</div>
-          <a className="profile-public-link text-link" href={`/users/${user.id}`} target="_blank" rel="noopener noreferrer">{t("Открыть публичный профиль ↗")}</a>
+          <Link className="profile-public-link text-link" href={`/users/${user.id}`} target="_blank" rel="noopener noreferrer">{t("Открыть публичный профиль ↗")}</Link>
           <p className="profile-help">{t("Так ваши сохранённые данные увидят другие пользователи.")}</p></>}
       </aside>
     </div>
@@ -156,9 +157,9 @@ export function PublicProfilePage({ userId, user }) {
     return () => {active = false;};
   }, [userId, attempt]);
   if (error) return <section className="profile-card"><h1>{t("Не удалось открыть профиль")}</h1><Problems problem={error} />
-    {error.status !== 404 && <button onClick={() => setAttempt((value) => value + 1)}>{t("Повторить")}</button>}<a className="text-link" href="/">{t("На главную")}</a></section>;
+    {error.status !== 404 && <button onClick={() => setAttempt((value) => value + 1)}>{t("Повторить")}</button>}<Link className="text-link" href="/">{t("На главную")}</Link></section>;
   if (!profile) return <div className="profile-card" role="status">{t("Загружаем профиль…")}</div>;
-  return <><div className="profile-page-heading"><div><p className="eyebrow">{t("Люди Workify")}</p><h1>{t("Профиль клиента")}</h1></div><a className="text-link" href="/">{t("← На главную")}</a></div>
+  return <><div className="profile-page-heading"><div><p className="eyebrow">{t("Люди Workify")}</p><h1>{t("Профиль клиента")}</h1></div><Link className="text-link" href="/">{t("← На главную")}</Link></div>
     <div className="public-profile-layout"><section className="profile-card public-profile-identity"><ProfileIdentity profile={profile} />
       <div className="profile-ratings"><div><strong>{profile.customerRating ?? '—'}</strong><span>{t("Как заказчик")}</span><small>{t("Отзывов: ")}{profile.customerReviewCount}</small></div>
         <div><strong>{profile.freelancerRating ?? '—'}</strong><span>{t("Как исполнитель")}</span><small>{t("Отзывов: ")}{profile.freelancerReviewCount}</small></div></div></section>
