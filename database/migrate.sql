@@ -75,4 +75,11 @@ SELECT NOT EXISTS (SELECT FROM workify.schema_migrations WHERE version = 7) AS a
  INSERT INTO workify.schema_migrations(version,name) VALUES(7,'account_deletion');
  COMMIT;
 \endif
+SELECT NOT EXISTS (SELECT FROM workify.schema_migrations WHERE version = 8) AS apply_008 \gset
+\if :apply_008
+ BEGIN;
+ \ir migrations/008_audit_archive.sql
+ INSERT INTO workify.schema_migrations(version,name) VALUES(8,'audit_archive');
+ COMMIT;
+\endif
 SELECT pg_advisory_unlock(173204, 2);
