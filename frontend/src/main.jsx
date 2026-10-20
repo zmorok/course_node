@@ -11,6 +11,7 @@ import {OwnInvitationsPage} from './InvitationPages.jsx';
 import {OrderListPage,OrderDetailsPage} from './OrderPages.jsx';
 import {MyReviewsPage} from './Reviews.jsx';
 import {ComplaintsPage,WarningsPage} from './Complaints.jsx';
+import {AdminPage} from './AdminPage.jsx';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -66,16 +67,17 @@ function App() {
   const ownComplaints=/^\/me\/complaints\/?$/.test(window.location.pathname);
   const complaintMatch=/^\/me\/complaints\/([^/]+)\/?$/.exec(window.location.pathname);
   const ownWarnings=/^\/me\/warnings\/?$/.test(window.location.pathname);
+  const adminView=/^\/admin(?:\/|$)/.test(window.location.pathname);
   const orderMatch=/^\/orders\/([^/]+)\/?$/.exec(window.location.pathname);
   const newProject = /^\/projects\/new\/?$/.test(window.location.pathname);
   const projectMatch = !newProject && /^\/projects\/([^/]+)(\/edit)?\/?$/.exec(window.location.pathname);
-  const projectView = Boolean(catalog || freelancers || projectMatch && (!projectMatch[2] || user) || (newProject || ownProjects || ownProposals || ownInvitations || ownOrders || ownReviews || ownComplaints || complaintMatch || ownWarnings || orderMatch) && user);
+  const projectView = Boolean(catalog || freelancers || projectMatch && (!projectMatch[2] || user) || (newProject || ownProjects || ownProposals || ownInvitations || ownOrders || ownReviews || ownComplaints || complaintMatch || ownWarnings || adminView || orderMatch) && user);
   const profileView = Boolean(publicMatch || (ownProfile && user) || projectView);
   return (
     <div className={profileView ? 'page profile-page' : 'page'}>
       <header className="header">
         <a className="brand" href="/" aria-label="Workify — главная"><span className="brand-mark">w.</span>workify</a>
-        {user ? <nav className="profile-nav" aria-label="Навигация"><a href="/projects" aria-current={catalog?'page':undefined}>Каталог</a><a href="/freelancers" aria-current={freelancers?'page':undefined}>Исполнители</a>{user.role==='CLIENT'&&<><a href="/me/projects" aria-current={ownProjects?'page':undefined}>Мои проекты</a><a href="/me/orders" aria-current={ownOrders||orderMatch?'page':undefined}>Заказы</a><a href="/me/reviews" aria-current={ownReviews?'page':undefined}>Отзывы</a><a href="/me/complaints" aria-current={ownComplaints||complaintMatch?'page':undefined}>Жалобы</a><a href="/me/warnings" aria-current={ownWarnings?'page':undefined}>Предупреждения</a><a href="/me/proposals" aria-current={ownProposals?'page':undefined}>Мои отклики</a><a href="/me/invitations" aria-current={ownInvitations?'page':undefined}>Приглашения</a></>}<a href="/me/profile" aria-current={ownProfile ? 'page' : undefined}>Мой профиль</a><a href="/">Аккаунт</a></nav>
+        {user ? <nav className="profile-nav" aria-label="Навигация"><a href="/projects" aria-current={catalog?'page':undefined}>Каталог</a><a href="/freelancers" aria-current={freelancers?'page':undefined}>Исполнители</a>{user.role==='CLIENT'&&<><a href="/me/projects" aria-current={ownProjects?'page':undefined}>Мои проекты</a><a href="/me/orders" aria-current={ownOrders||orderMatch?'page':undefined}>Заказы</a><a href="/me/reviews" aria-current={ownReviews?'page':undefined}>Отзывы</a><a href="/me/complaints" aria-current={ownComplaints||complaintMatch?'page':undefined}>Жалобы</a><a href="/me/warnings" aria-current={ownWarnings?'page':undefined}>Предупреждения</a><a href="/me/proposals" aria-current={ownProposals?'page':undefined}>Мои отклики</a><a href="/me/invitations" aria-current={ownInvitations?'page':undefined}>Приглашения</a></>}{user.role==='ADMIN'&&<a href="/admin/complaints" aria-current={adminView?'page':undefined}>Администрирование</a>}<a href="/me/profile" aria-current={ownProfile ? 'page' : undefined}>Мой профиль</a><a href="/">Аккаунт</a></nav>
           : <nav className="profile-nav" aria-label="Навигация"><a href="/projects">Каталог проектов</a><a href="/freelancers">Исполнители</a><a href="/">Войти</a></nav>}
       </header>
       <main className={profileView ? 'profile-main' : undefined}>
@@ -89,6 +91,7 @@ function App() {
           : ownReviews && user ? <MyReviewsPage key={user.id} user={user}/>
           : (ownComplaints || complaintMatch) && user ? <ComplaintsPage key={user.id} user={user} complaintId={complaintMatch?.[1]}/>
           : ownWarnings && user ? <WarningsPage key={user.id} user={user}/>
+          : adminView && user ? <AdminPage key={user.id} user={user}/>
           : orderMatch && user ? <OrderDetailsPage key={user.id} user={user} orderId={orderMatch[1]}/>
           : newProject && user ? <ProjectEditorPage user={user}/>
           : projectMatch && (!projectMatch[2] || user) ? projectMatch[2] ? <ProjectEditorPage projectId={projectMatch[1]} user={user}/> : <ProjectDetailsPage projectId={projectMatch[1]} user={user}/>
