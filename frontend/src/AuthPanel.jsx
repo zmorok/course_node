@@ -82,19 +82,18 @@ export function AccountPanel({ user, onLogout, onRefresh, onAdminCheck }) {
     {setBusy(false);}
   }
   return <section className="auth-card account-card" aria-labelledby="account-title">
-    <div className="account-top"><span className="avatar" aria-hidden="true">{user.firstName.slice(0, 1)}</span><span className="role-badge">{user.role === 'ADMIN' ? t("Администратор") : t("Клиент")}</span></div>
-    <p className="eyebrow">{t("Вы в Workify")}</p>
+    <div className="account-top"><span className="role-badge">{user.role === 'ADMIN' ? t("Администратор") : t("Клиент")}</span></div>
     <h2 id="account-title">{user.firstName} {user.lastName}</h2>
     <p className="account-username">@{user.username}</p><p className="account-email">{user.email}</p>
     <div className="account-info">{user.role === 'ADMIN' ? t("Рассматривайте жалобы, изучайте историю заказов и управляйте ограничениями клиентов.") : t("Вы можете быть заказчиком и исполнителем. Заполните профиль и укажите свои навыки.")}</div>
     <div className="account-actions">
-      <Link className="button-link" href="/me/profile">{t("Мой профиль")}<span aria-hidden="true">↗</span></Link>
-      {user.role === 'CLIENT' && <Link className="button-link" href="/me/projects">{t("Мои проекты")}<span aria-hidden="true">↗</span></Link>}
-      {user.role === 'CLIENT' && <Link className="button-link" href="/me/orders">{t("Мои заказы")}<span aria-hidden="true">↗</span></Link>}
-      <button type="button" disabled={busy} onClick={() => run(onRefresh)}>{t("Обновить данные")}<span aria-hidden="true">↻</span></button>
-      {user.role === 'ADMIN' && <Link className="button-link" href="/admin/complaints">{t("Административная панель")}<span aria-hidden="true">↗</span></Link>}
-      {user.role === 'ADMIN' && <button type="button" disabled={busy} onClick={() => run(onAdminCheck)}>{t("Проверить доступ администратора")}</button>}
-      <button type="button" className="secondary" disabled={busy} onClick={() => run(onLogout)}>{t("Выйти из аккаунта")}</button>
+      <Link className="secondary button-link" href="/me/profile">{t("Мой профиль")}</Link>
+      {user.role === 'CLIENT' && <Link className="secondary button-link" href="/me/projects">{t("Мои проекты")}</Link>}
+      {user.role === 'CLIENT' && <Link className="secondary button-link" href="/me/orders">{t("Мои заказы")}</Link>}
+      <button type="button" className="secondary" disabled={busy} onClick={() => run(onRefresh)}>{t("Обновить данные")}</button>
+      {user.role === 'ADMIN' && <Link className="secondary button-link" href="/admin/complaints">{t("Административная панель")}</Link>}
+      {user.role === 'ADMIN' && <button type="button" className="secondary" disabled={busy} onClick={() => run(onAdminCheck)}>{t("Проверить доступ администратора")}</button>}
+      <button type="button" className="text-button" disabled={busy} onClick={() => run(onLogout)}>{t("Выйти из аккаунта")}</button>
     </div>
     {message && <p role="status" className="account-message">{t(message)}</p>}
   </section>;

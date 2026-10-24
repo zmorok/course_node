@@ -10,7 +10,7 @@ const deadlineStatuses = () => ({ PENDING: t("Ожидает решения"), A
 const reasons = () => ({ ORDER_SUBMITTED: t("Работа передана на проверку"), ORDER_COMPLETED: t("Заказ завершён"), ORDER_CANCELLED: t("Заказ отменён"), TIME_EXPIRED: t("Предложенная дата уже прошла"), DEADLINE_CHANGED: t("Исходный срок изменился") });
 const emptySubmission = () => ({ comment: '', links: '', files: [] });
 function Pages({ data, page, setPage, label, disabled }) {return data ? <CommonPagination data={data} page={page} onPage={setPage} label={label} disabled={disabled} /> : null;}
-export function OrderWorkPanel({ order, onChange }) {
+export function OrderWorkPanel({ order, onChange, renderLayout }) {
   const path = `/orders/${order.id}`;
   const [submissions, setSubmissions] = useState(null),[deadlines, setDeadlines] = useState(null),[loading, setLoading] = useState(true),[loadError, setLoadError] = useState(null),[attempt, setAttempt] = useState(0),[submissionPage, setSubmissionPage] = useState(1),[deadlinePage, setDeadlinePage] = useState(1);
   const [draft, setDraft] = useState(null),[available, setAvailable] = useState([]),[libraryError, setLibraryError] = useState(null),[uploading, setUploading] = useState(false),[deadlineDraft, setDeadlineDraft] = useState(null),[review, setReview] = useState(null),[deadlineDecision, setDeadlineDecision] = useState(null);
@@ -20,6 +20,8 @@ export function OrderWorkPanel({ order, onChange }) {
   }, [path, order.updatedAt, submissionPage, deadlinePage, attempt]);
   useEffect(() => {setReview(null);}, [order.lastSubmission?.id, order.status]);
   useEffect(() => {setDeadlineDecision(null);}, [order.pendingDeadlineRequest?.id, order.status]);
+  useEffect(() => {if (draft) document.getElementById('submission-comment')?.focus();}, [draft !== null]);
+  useEffect(() => {if (deadlineDraft) document.getElementById('order-new-deadline')?.focus();}, [deadlineDraft !== null]);
   const locked = busy || uploading || needsRefresh;
   async function refresh() {setBusy(true);setError(null);setErrorArea(null);try {await onChange();setNeedsRefresh(false);setAttempt((value) => value + 1);} catch (problem) {setError(problem);} finally {setBusy(false);}}
   async function command(suffix, body, success, after) {setBusy(true);setError(null);setErrorArea(suffix.startsWith('submissions') ? 'submission' : 'deadline');setMessage('');let saved = false;
@@ -32,9 +34,13 @@ export function OrderWorkPanel({ order, onChange }) {
   function submit(event) {event.preventDefault();command('submissions', { comment: draft.comment, links: draft.links.split('\n').map((value) => value.trim()).filter(Boolean), fileIds: draft.files.map((file) => file.id) }, t("Новая версия передана заказчику на проверку."), () => setDraft(null));}
   function sendDeadline(event) {event.preventDefault();const proposed = new Date(deadlineDraft.date);if (!Number.isFinite(proposed.getTime())) {setErrorArea('deadline');setError({ message: uiMessage("Укажите дату и время нового срока.") });return;}command('deadline-requests', { proposedDeadlineAt: proposed.toISOString(), reason: deadlineDraft.reason }, t("Запрос срока отправлен. Текущий срок изменится после одобрения."), () => setDeadlineDraft(null));}
   const freeFiles = available.filter((file) => !file.inUse && !draft?.files.some((value) => value.id === file.id));
-  return <>
-    <section className="profile-card order-work-feedback" aria-label={t("Действия с заказом")}><p className="save-message" role="status">{t(message)}</p><ErrorMessage error={errorArea === null ? error : null} /><button className="text-button" disabled={busy || uploading} onClick={refresh}>{t("Обновить данные заказа")}</button></section>
-    <section className="profile-card order-work-panel" aria-labelledby="submissions-heading"><div className="portfolio-heading"><div><p className="eyebrow">{t("От первой версии к результату")}</p><h2 id="submissions-heading">{t("Результаты работы")}</h2></div>{order.permissions.submit && !draft && <button className="secondary" disabled={locked} onClick={openSubmission}>{t("Сдать результат ↗")}</button>}</div>
+  const feedback = (message || errorArea === null && error || needsRefresh) && <div className="order-work-feedback" aria-label={t("Действия с заказом")}><p className="save-message" role="status">{t(message)}</p><ErrorMessage error={errorArea === null ? error : null} /><button className="text-button" disabled={busy || uploading} onClick={refresh}>{t("Обновить данные заказа")}</button></div>;
+  const actions = <div className="order-primary-actions">
+    {order.permissions.submit && !draft && <button disabled={locked} onClick={openSubmission}>{t("Сдать результат ↗")}</button>}
+    {order.permissions.acceptSubmission && <Link className="button-link" href="#submissions-heading">{t('Проверить результат')}</Link>}
+    {order.permissions.requestDeadline && !deadlineDraft && <button className="secondary" disabled={locked} onClick={() => {setDeadlineDraft({ date: '', reason: '' });setError(null);}}>{t("Предложить новый срок")}</button>}
+  </div>;
+  const submissionsPanel = <section className="profile-card order-work-panel" aria-labelledby="submissions-heading"><div className="portfolio-heading"><div><p className="eyebrow">{t("От первой версии к результату")}</p><h2 id="submissions-heading" tabIndex={-1}>{t("Результаты работы")}</h2></div></div>
       <p className="profile-help">{t("Версии и решения сохраняются. После замечаний отправьте новую версию с исправлениями.")}</p>
       <ErrorMessage error={errorArea === 'submission' ? error : null} />
       {draft && order.permissions.submit && <form className="order-work-form" onSubmit={submit}><fieldset disabled={locked}><legend>{t("Новая версия результата")}</legend>
@@ -62,8 +68,8 @@ export function OrderWorkPanel({ order, onChange }) {
           </>}
         </article>)}<Pages data={submissions} page={submissionPage} setPage={setSubmissionPage} label={t("Страницы версий результата")} disabled={locked} />
       </>}
-    </section>
-    <section className="profile-card order-work-panel" aria-labelledby="deadlines-heading"><div className="portfolio-heading"><div><p className="eyebrow">{t("Срок по согласию сторон")}</p><h2 id="deadlines-heading">{t("Изменение срока")}</h2></div>{order.permissions.requestDeadline && !deadlineDraft && <button className="secondary" disabled={locked} onClick={() => {setDeadlineDraft({ date: '', reason: '' });setError(null);}}>{t("Предложить новый срок")}</button>}</div>
+    </section>;
+  const deadlinesPanel = <section className="profile-card order-work-panel" aria-labelledby="deadlines-heading"><div className="portfolio-heading"><div><p className="eyebrow">{t("Срок по согласию сторон")}</p><h2 id="deadlines-heading">{t("Изменение срока")}</h2></div></div>
       <p className="profile-help">{t("Текущий срок: ")}{date(order.deadlineAt)}{t(". До одобрения заказчиком он остаётся прежним.")}</p>
       <ErrorMessage error={errorArea === 'deadline' ? error : null} />
       {deadlineDraft && order.permissions.requestDeadline && <form className="order-work-form" onSubmit={sendDeadline}><fieldset disabled={locked}><legend>{t("Запрос изменения срока")}</legend><div className="field"><label htmlFor="order-new-deadline">{t("Предлагаемый срок")}</label><input id="order-new-deadline" type="datetime-local" required value={deadlineDraft.date} onChange={(event) => setDeadlineDraft({ ...deadlineDraft, date: event.target.value })} /><small>{t("Будущая дата и время, отличные от текущего срока.")}</small></div><div className="field"><label htmlFor="order-deadline-reason">{t("Причина изменения срока")}</label><textarea id="order-deadline-reason" required maxLength={1000} rows={3} value={deadlineDraft.reason} onChange={(event) => setDeadlineDraft({ ...deadlineDraft, reason: event.target.value })} /></div><div className="proposal-actions"><button type="submit">{busy ? t("Отправляем…") : t("Отправить запрос срока")}</button><button type="button" className="secondary" onClick={() => {setDeadlineDraft(null);setError(null);}}>{t("Отменить запрос")}</button></div></fieldset></form>}
@@ -77,6 +83,6 @@ export function OrderWorkPanel({ order, onChange }) {
           </>}
         </article>)}<Pages data={deadlines} page={deadlinePage} setPage={setDeadlinePage} label={t("Страницы запросов срока")} disabled={locked} />
       </>}
-    </section>
-  </>;
+    </section>;
+  return renderLayout ? renderLayout({ actions, feedback, submissions: submissionsPanel, deadlines: deadlinesPanel }) : <>{actions}{feedback}{submissionsPanel}{deadlinesPanel}</>;
 }

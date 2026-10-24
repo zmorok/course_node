@@ -1,4 +1,11 @@
 export const english = {
+  "Проверить результат": "Review result",
+  "Настройки профиля": "Profile settings",
+  "Безопасность": "Security",
+  "Личный кабинет": "Workspace",
+  "Открыть меню": "Open menu",
+  "Мобильная навигация": "Mobile navigation",
+  "Создать проект": "Create project",
   "+ Добавить работу": "+ Add work",
   "+ Загрузить доказательство": "+ Upload evidence",
   "+ Загрузить файл": "+ Upload file",

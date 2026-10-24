@@ -1,7 +1,9 @@
 import { Link, useLocation, RouteFocus } from './Navigation.jsx';
 import { uiMessage, t, locale } from "./i18n.js";import { Preferences, usePreferences } from './Preferences.jsx';
-import { SiteNavigation } from './SiteNavigation.jsx';
-import { NotificationsPage } from './Notifications.jsx';
+import { SiteNavigation, WorkspaceNavigation, MobileNavigation } from './SiteNavigation.jsx';
+import { NotificationsPage, NotificationLink } from './Notifications.jsx';
+import { navigate, isAppUrl } from './navigation.js';
+import { Icon } from './Icon.jsx';
 import React, { useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
@@ -81,14 +83,21 @@ function App() {
   const projectMatch = !newProject && /^\/projects\/([^/]+)(\/edit)?\/?$/.exec(location.pathname);
   const projectView = Boolean(catalog || freelancers || projectMatch && (!projectMatch[2] || user) || (newProject || ownProjects || ownProposals || ownInvitations || ownOrders || ownReviews || ownComplaints || complaintMatch || ownWarnings || ownNotifications || adminView || orderMatch) && user);
   const profileView = Boolean(publicMatch || ownProfile && user || projectView);
+  const workspaceView = Boolean(user && (location.pathname === '/' || location.pathname.startsWith('/me/') || adminView || orderMatch));
+  const welcomeView = !profileView;
   return (
-    <div className={profileView ? 'page profile-page' : 'page'}>
+    <div className="page">
       <Link className="skip-link" href="#main-content">{t("К содержимому")}</Link>
-      <header className="header">
-        <Link className="brand" href="/" aria-label={t("Workify — главная")}><span className="brand-mark">w.</span>workify</Link>
-        <SiteNavigation user={user} /><Preferences />
+      <header className="header"><div className="header-inner">
+        <Link className="brand" href="/" aria-label={t("Workify — главная")}><img className="brand-light" src="/assets/workify/brand/workify-wordmark-light.svg" alt="Workify" /><img className="brand-dark" src="/assets/workify/brand/workify-wordmark-dark.svg" alt="Workify" /></Link>
+        <SiteNavigation /><div className="header-actions"><Preferences />{user && <NotificationLink key={user.id} current={ownNotifications} />}
+          <Link className="secondary button-link workspace-link" href={user ? '/me/profile' : '/'}>{user ? t('Личный кабинет') : t('Войти')}<Icon name="user" /></Link>
+          <MobileNavigation user={user} />
+        </div></div>
       </header>
-      <RouteFocus /><main id="main-content" tabIndex={-1} className={profileView ? 'profile-main' : undefined}>
+      <div className={`app-layout${workspaceView ? ' app-layout-workspace' : ''}`}>
+      {workspaceView && <WorkspaceNavigation user={user} />}
+      <RouteFocus /><main id="main-content" tabIndex={-1} className={welcomeView ? user ? 'account-main' : 'welcome-main' : 'profile-main'}>
         <React.Fragment key={`${location.pathname}${location.search}:${user?.id ?? 'guest'}`} >{projectView && restoring ? <div className="profile-card" role="status">{t("Загружаем рабочее пространство…")}</div> :
         catalog ? <ProjectListPage user={user} /> :
         freelancers ? <FreelancerPage /> :
@@ -106,25 +115,27 @@ function App() {
         newProject && user ? <ProjectEditorPage user={user} /> :
         projectMatch && (!projectMatch[2] || user) ? projectMatch[2] ? <ProjectEditorPage projectId={projectMatch[1]} user={user} /> : <ProjectDetailsPage projectId={projectMatch[1]} user={user} /> :
         publicMatch ? <PublicProfilePage userId={publicMatch[1]} user={user} /> : ownProfile && user ? <ProfilePage user={user} onUserChange={setUser} /> : <>
-        <section className="intro" aria-labelledby="welcome-title">
+        {user ? <div className="profile-page-heading"><h1>{t('Аккаунт Workify')}</h1></div> : <section className="intro" aria-labelledby="welcome-title">
           <p className="eyebrow">{t("Ваше рабочее пространство")}</p>
           <h1 id="welcome-title">{t("Хорошие проекты")}<br />{t("начинаются с людей.")}</h1>
           <p className="lead">{t("Workify объединяет заказчика и исполнителя: от первого предложения до принятого результата.")}</p>
+          <div className="discovery-links"><Link className="button-link" href="/projects">{t('Каталог проектов')}<Icon name="arrow-up-right" /></Link><Link className="secondary button-link" href="/freelancers">{t('Исполнители')}<Icon name="user" /></Link></div>
           <div className="connection" role="status" aria-live="polite">
             <span className={`indicator indicator-${connection}`} aria-hidden="true" />
             <span>{labels[connection]}</span>
           </div>
           <button type="button" onClick={() => checkConnection()} disabled={connection === 'checking'}>{t("Проверить подключение ")}<span aria-hidden="true">↗</span></button>
-        </section>
-        <aside className="auth-area" aria-label={t("Аккаунт Workify")}>
+        </section>}
+        <aside className={user ? 'auth-area account-area' : 'auth-area'} aria-label={t("Аккаунт Workify")}>
           {user ? <AccountPanel user={user} onLogout={logout}
             onRefresh={async () => {const result = await api('/auth/me');setUser(result.user);return uiMessage("Данные аккаунта обновлены");}}
             onAdminCheck={async () => {await api('/admin/access');return uiMessage("Доступ администратора подтверждён");}} /> :
-            <AuthPanel restoring={restoring} notice={new URLSearchParams(location.search).has('passwordChanged') ? t("Пароль изменён. Войдите с новым паролем.") : notice} onAuthenticate={async (mode, values) => {setUser(await authenticate(mode, values));setNotice('');setRestoreFailed(false);}} />}
+            <AuthPanel restoring={restoring} notice={new URLSearchParams(location.search).has('passwordChanged') ? t("Пароль изменён. Войдите с новым паролем.") : notice} onAuthenticate={async (mode, values) => {setUser(await authenticate(mode, values));setNotice('');setRestoreFailed(false);const next = new URLSearchParams(location.search).get('returnTo') ?? (location.pathname !== '/' ? location.href : null);if (next?.startsWith('/') && isAppUrl(next)) navigate(next);else if (location.pathname !== '/') navigate('/');}} />}
           {restoreFailed && !restoring && !user && <button className="restore-button secondary" onClick={restore}>{t("Повторить восстановление сессии")}</button>}
         </aside>
+        {user && <div className="account-connection"><div className="connection" role="status"><span className={`indicator indicator-${connection}`} aria-hidden="true" /><span>{labels[connection]}</span></div><button className="text-button" onClick={() => checkConnection()} disabled={connection === 'checking'}>{t('Проверить подключение')}</button></div>}
         </>}
-      </React.Fragment></main>
+      </React.Fragment></main></div>
       <footer><span>Workify</span><span>{t("Для работы, у которой есть результат.")}</span></footer>
     </div>);
 

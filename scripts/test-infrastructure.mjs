@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -247,6 +248,19 @@ try {
   assert(assets.some(asset => asset.endsWith('.js')), 'The built React entry point must exist');
   assert(assets.some(asset => asset.endsWith('.css')), 'Built styles must exist');
   for (const asset of assets) assert.equal((await request(`${frontend}${asset}`)).status, 200);
+  for (const [asset, contentType] of [
+    ['/assets/workify/brand/workify-wordmark-light.svg', /^image\/svg\+xml\b/],
+    ['/assets/workify/brand/workify-wordmark-dark.svg', /^image\/svg\+xml\b/],
+    ['/assets/workify/fonts/InterVariable.woff2', /^font\/woff2\b/],
+  ]) {
+    const response = await request(`${frontend}${asset}`);
+    assert.equal(response.status, 200, `${asset} must be included in the Docker build`);
+    assert.match(response.headers.get('content-type') ?? '', contentType);
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()),
+      await readFile(new URL(`../frontend/public${asset}`, import.meta.url)),
+      `${asset} must match the original public asset`);
+  }
+  console.log('PASS: both theme logos and the local font are served intact from the Docker image');
   assert.equal((await request(`${frontend}/workspace`)).status, 200, 'SPA routes must serve index.html');
   for (const path of ['/.env', '/assets/missing.js', '/api/unknown']) {
     assert.equal((await request(`${frontend}${path}`)).status, 404, `${path} must not fall back to the SPA`);

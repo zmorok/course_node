@@ -90,7 +90,7 @@ test('switching order modes and sections preserves the authenticated workspace',
   await expect(page.getByRole('heading', { name: 'История пока пуста' })).toBeVisible();
   await page.goBack();
   await expect(page.getByRole('link', { name: 'Активные', exact: true })).toHaveAttribute('aria-current', 'page');
-  await page.getByRole('navigation', { name: 'Навигация', exact: true }).getByRole('link', { name: 'Каталог', exact: true }).click();
+  await page.getByRole('navigation', { name: 'Навигация', exact: true }).getByRole('link', { name: 'Каталог проектов', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Каталог проектов', exact: true })).toBeVisible();
   expect(app.documents).toHaveLength(1);
   expect(app.refreshes).toHaveLength(refreshCount);
@@ -160,6 +160,7 @@ test('saving and deleting a project change the route without loading a document'
 test('password changes end the session and show the login notice without loading a document', async ({ page }) => {
   const app = await workspace(page, { authenticated: true });
   await page.goto('/me/profile');
+  await page.getByRole('button', { name: 'Безопасность', exact: true }).click();
   await page.locator('#password-currentPassword').fill('Current-password-123');
   await page.locator('#password-newPassword').fill('Another-password-456');
   await page.locator('#password-repeat').fill('Another-password-456');
@@ -191,6 +192,7 @@ test('language switches preserve filters and update status dictionaries on the s
 test('existing form validation messages translate without losing the input', async ({ page }) => {
   const app = await workspace(page, { authenticated: true });
   await page.goto('/me/profile');
+  await page.getByRole('button', { name: 'Безопасность', exact: true }).click();
   await page.locator('#password-currentPassword').fill('Current-password-123');
   await page.locator('#password-newPassword').fill('Another-password-456');
   await page.locator('#password-repeat').fill('Different-password-789');
