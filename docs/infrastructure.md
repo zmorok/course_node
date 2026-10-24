@@ -13,7 +13,7 @@ node scripts/setup-env.mjs
 docker compose up --build -d --wait
 ```
 
-[setup-env.mjs](../scripts/setup-env.mjs) создаёт `.env` из [.env.example](../.env.example), генерируя случайные секреты PostgreSQL и JWT. Скрипт не печатает секреты; в существующий файл дописывается только отсутствующий AUTH_JWT_SECRET. `.env` игнорируется Git и не входит в build contexts приложений. При ручной настройке нужны собственные POSTGRES_PASSWORD и 32 случайных байта AUTH_JWT_SECRET в hex; placeholder из примера для запуска не подходит.
+[setup-env.mjs](../scripts/setup-env.mjs) создаёт `.env` из [.env.example](../.env.example), генерируя независимые пароли владельца PostgreSQL и приложения, а также JWT secret. Скрипт не печатает секреты; в существующий файл дописываются только отсутствующие AUTH_JWT_SECRET и APP_DB_PASSWORD. `.env` игнорируется Git и не входит в build contexts приложений. При ручной настройке нужны разные POSTGRES_PASSWORD и APP_DB_PASSWORD, а также 32 случайных байта AUTH_JWT_SECRET в hex; placeholder из примера для запуска не подходит.
 
 - [Frontend](http://localhost:5173) — стартовая страница React с проверкой подключения.
 - [Backend health](http://localhost:3000/api/health) — готовность API, PostgreSQL и каталога файлов.
@@ -26,7 +26,7 @@ docker compose up --build -d --wait
 | Сервис | Назначение | Готовность и зависимости |
 |---|---|---|
 | `postgres` | Официальный postgres:17-alpine, данные в postgres_data | pg_isready через TCP; порт БД не публикуется на хост |
-| `migrate` | Тот же PostgreSQL image запускает psql и [database/migrate.sql](../database/migrate.sql) | Ждёт здоровый postgres; завершается с кодом 0 после успешных миграций |
+| `migrate` | Тот же PostgreSQL image запускает psql и [database/migrate.sql](../database/migrate.sql) | Ждёт здоровый postgres; завершается с кодом 0 после успешных миграций и настройки runtime-роли |
 | `backend` | Express и pg, Node.js 24, порт контейнера 3000 | Ждёт postgres и успешный migrate; GET /api/health выполняет SELECT 1 через repository и проверяет доступ к uploads |
 | `frontend` | Собранный React, отдельный сервер статики и API proxy, порт контейнера 8080 | Ждёт здоровый backend; собственный /healthz проверяет доступность сервера frontend |
 
@@ -54,17 +54,18 @@ Frontend собирается Vite через `npm ci` и `npm run build`. В ru
 | COMPOSE_PROJECT_NAME | workify; префикс имён ресурсов Compose |
 | POSTGRES_DB | workify |
 | POSTGRES_USER | workify |
-| POSTGRES_PASSWORD | Генерируется setup-env; обязательна для Compose |
+| POSTGRES_PASSWORD | Пароль владельца БД/мигратора, генерируется setup-env |
+| APP_DB_PASSWORD | Отдельный пароль роли workify_runtime для backend, генерируется setup-env |
 | FRONTEND_PORT | 5173 на хосте, 8080 внутри контейнера |
 | BACKEND_PORT | 3000 на хосте и в контейнере |
 
-Backend получает PGHOST=postgres, PGPORT=5432, PGDATABASE/PGUSER/PGPASSWORD из Compose и UPLOAD_DIR=/app/uploads. Эти значения не включаются в браузерную сборку. Порт хоста меняется через .env; внутренние адреса сервисов от этого не меняются.
+Backend получает PGHOST=postgres, PGPORT=5432, PGDATABASE из Compose, PGUSER=workify_runtime, PGPASSWORD из APP_DB_PASSWORD и UPLOAD_DIR=/app/uploads. Эти значения не включаются в браузерную сборку. Порт хоста меняется через .env; внутренние адреса сервисов от этого не меняются.
 
-Изменение пароля в .env само по себе не меняет пароль роли в уже созданной PostgreSQL-базе: POSTGRES_* используется образом при первоначальном создании кластера. Поэтому setup-env сохраняет существующий файл. Для обычного продолжения работы используются прежние настройки и volumes.
+Изменение пароля в .env само по себе не меняет пароль роли в уже созданной PostgreSQL-базе: POSTGRES_* используется образом при первоначальном создании кластера. Поэтому setup-env сохраняет существующие значения. Пароль workify_runtime применяется заново при каждом запуске migrate; при его изменении нужно выполнить мигратор и пересоздать backend. Для обычного продолжения работы используются прежние настройки и volumes.
 
 ## Миграции и постоянное хранение
 
-`migrate` монтирует каталог database как read-only `/migrations`. Он использует PostgreSQL credentials из environment и подключается по имени postgres. Миграции применяются через имеющийся журнал версий и advisory lock. Ошибка миграции останавливает запуск backend; успешный повтор не пересоздаёт таблицы, seed или идентификаторы. Для явного применения новых миграций:
+`migrate` монтирует каталог database как read-only `/migrations`. Он использует учётную запись владельца из POSTGRES_USER/POSTGRES_PASSWORD и подключается по имени postgres. После миграций [runtime-role.sql](../database/runtime-role.sql) идемпотентно создаёт/настраивает отдельную роль workify_runtime с собственным паролем. API получает DML-доступ к рабочим таблицам и чтение журнала миграций; у журналов истории разрешены только чтение и добавление. Нет superuser, createdb, createrole, bypassrls, прав DDL, TRUNCATE и отключения триггеров. Справочники доступны для чтения; UPDATE только столбца name требуется для FOR SHARE при проверке ссылок. Скрипт не меняет версии схемы и не создаёт таблиц. Миграции применяются через имеющийся журнал версий и advisory lock. Ошибка миграции останавливает запуск backend; успешный повтор не пересоздаёт таблицы, seed или идентификаторы. Для явного применения новых миграций:
 
 ```powershell
 docker compose run --rm migrate
@@ -73,7 +74,7 @@ docker compose run --rm migrate
 | Volume | Путь контейнера | Содержимое |
 |---|---|---|
 | postgres_data | postgres:/var/lib/postgresql/data | Кластер, таблицы, справочники и журнал миграций |
-| uploads_data | backend:/app/uploads | Будущие загружаемые файлы, независимо от жизни контейнера |
+| uploads_data | backend:/app/uploads | Загруженные пользовательские файлы, независимо от жизни контейнера |
 
 При стандартном имени проекта Docker создаёт workify_postgres_data и workify_uploads_data. Пересоздание `docker compose up -d --force-recreate --wait` заменяет контейнеры, сохраняя volumes. Каталог uploads не раздаётся как публичная статика: FileService проверяет доступ к каждому вложению. В БД остаются только метаданные файлов.
 
