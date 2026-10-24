@@ -19,4 +19,8 @@ export function errorText(message,fallback='Could not complete the request. Chec
 }
 
 const notificationTitles={PROPOSAL_CREATED:'New project proposal',PROPOSAL_STATUS_CHANGED:'Proposal status changed',INVITATION_CREATED:'New project invitation',INVITATION_STATUS_CHANGED:'Invitation status changed',ORDER_CREATED:'Order created',SUBMISSION_CREATED:'A new result version was submitted',REVISION_REQUESTED:'The customer requested a revision',ORDER_COMPLETED:'The customer accepted the result',ORDER_CANCELLED:'Order cancelled',DEADLINE_REQUESTED:'New deadline requested',DEADLINE_APPROVED:'New deadline approved',DEADLINE_REJECTED:'Deadline request rejected',DEADLINE_EXPIRED:'Deadline request closed',COMPLAINT_IN_REVIEW:'Your complaint is under review',COMPLAINT_RESOLVED:'Your complaint has been reviewed',MODERATION_ACTION:'An administrator made an account decision'};
-export const notificationTitle=item=>getLanguage()==='en'?notificationTitles[item.type]??'New workspace event':item.message;
+export function notificationTitle(item) {
+ if (getLanguage() !== 'en') return item.message;
+ if (item.type === 'DEADLINE_DECIDED') return notificationTitles[item.outcome] ?? 'Deadline request updated';
+ return notificationTitles[item.type] ?? 'New workspace event';
+}

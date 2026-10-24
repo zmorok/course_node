@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {english} from '../src/en.js';import {t,locale,errorText,uiMessage} from '../src/i18n.js';
+import {english} from '../src/en.js';import {t,locale,errorText,uiMessage,notificationTitle} from '../src/i18n.js';
 import {getLanguage,getTheme,setLanguage,setTheme,applyPreferences,subscribePreferences,getPreferencesSnapshot} from '../src/preferences.js';
 test('every English catalog entry is translated and preserves interpolation placeholders',()=>{
  assert(Object.keys(english).length>=950);
@@ -13,6 +13,21 @@ test('stored interface messages translate in both directions after a language ch
  assert.equal(t(message,[],'ru'),'Импортировано: 3. Повторных записей: 2.');
  assert.equal(t(message,[],'en'),'Imported: 3. Duplicate records: 2.');
  assert.equal(t(message,[],'ru'),'Импортировано: 3. Повторных записей: 2.');
+});
+
+test('deadline notifications translate the actual decision and preserve Russian messages', () => {
+ const savedStorage = globalThis.localStorage;
+ let language = 'en';
+ globalThis.localStorage = {getItem:()=>language};
+ try {
+  for (const [outcome, title] of Object.entries({DEADLINE_APPROVED:'New deadline approved', DEADLINE_REJECTED:'Deadline request rejected', DEADLINE_EXPIRED:'Deadline request closed'})) {
+   const item = {type:'DEADLINE_DECIDED', outcome, message:'Решение по сроку'};
+   assert.equal(notificationTitle(item), title);
+   language = 'ru';assert.equal(notificationTitle(item), item.message);language = 'en';
+  }
+  assert.equal(notificationTitle({type:'DEADLINE_DECIDED'}), 'Deadline request updated');
+  assert.equal(notificationTitle({type:'FUTURE_EVENT'}), 'New workspace event');
+ } finally {globalThis.localStorage = savedStorage;}
 });
 
 test('preferences notify subscribers and work when browser storage rejects writes',()=>{

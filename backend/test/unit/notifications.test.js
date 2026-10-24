@@ -12,3 +12,15 @@ test('notification projection excludes internal metadata and only uses the authe
  const service=createNotificationService({repository:{list:async(...args)=>{calls.push(args);return {items:[row],total:1,unread_count:1};},markRead:async(...args)=>{calls.push(args);return undefined;}}});
  const data=await service.list({id:recipient,status:'ACTIVE'},{page:1,pageSize:12});assert.equal(calls[0][0],recipient);assert.equal(data.items[0].href,'/orders/order');assert.equal(data.items[0].createdAt,'2026-10-20T00:00:00.123Z');assert(!JSON.stringify(data).includes('attacker'));assert(!JSON.stringify(data).includes('token'));await assert.rejects(service.markRead({id:recipient,status:'ACTIVE'},id),error=>error.statusCode===404);assert.deepEqual(calls[1],[recipient,id]);await assert.rejects(service.list(null,{}),error=>error.statusCode===401);
 });
+
+test('deadline decisions expose only a whitelisted outcome for translation', async () => {
+ const statuses = ['DEADLINE_APPROVED', 'DEADLINE_REJECTED', 'DEADLINE_EXPIRED', 'private-value', undefined];
+ const rows = statuses.map((status, id) => ({id, event_type:'DEADLINE_DECIDED', message:'Событие', created_at:'2026-10-20T00:00:00Z', metadata:{status, token:'private'}}));
+ rows.push({...rows[0], event_type:'ORDER_CREATED'});
+ const service = createNotificationService({repository:{list:async()=>({items:rows, total:rows.length, unread_count:rows.length})}});
+ const {items} = await service.list({id:'user', status:'ACTIVE'}, {page:1, pageSize:12});
+ assert.deepEqual(items.slice(0, 3).map(item=>item.outcome), statuses.slice(0, 3));
+ for (const item of items.slice(3)) assert(!Object.hasOwn(item, 'outcome'));
+ assert(!JSON.stringify(items).includes('private'));
+ assert(items.every(item=>!Object.hasOwn(item, 'metadata')));
+});

@@ -8,6 +8,22 @@ if(process.env.WORKIFY_DB_TESTS!=='1')throw new Error('Use the disposable infras
 const config=loadConfig({...process.env,NODE_ENV:'test'}),pool=createDatabasePool(config.database);after(()=>pool.end());
 async function setup(context,options){const app=await marketplace(context,pool,config,options),a=await app.register(),b=await app.register(),other=await app.register();return {...app,a,b,other};}
 const list=(app,actor,query='')=>app.api(actor,`/me/notifications${query}`);
+
+test('deadline notification API distinguishes approval rejection and automatic closure without exposing metadata', async context => {
+ const app = await setup(context), order = await app.order(app.a, app.b);
+ for (const [decision, days] of [['reject', 40], ['approve', 41]]) {
+  const request = await app.api(app.b, `/orders/${order.id}/deadline-requests`, 'POST', {proposedDeadlineAt:future(days), reason:'Изменить срок'});
+  assert.equal(request.response.status, 201);
+  const result = await app.api(app.a, `/orders/${order.id}/deadline-requests/${request.body.requestId}/${decision}`, 'POST', {reason:'Решение заказчика'});
+  assert.equal(result.response.status, 200);
+ }
+ await app.api(app.b, `/orders/${order.id}/deadline-requests`, 'POST', {proposedDeadlineAt:future(42), reason:'Ещё один запрос'});
+ const submission = await app.api(app.b, `/orders/${order.id}/submissions`, 'POST', {comment:'Результат', links:['https://example.org/result']});
+ assert.equal(submission.response.status, 201);
+ const decisions = (await list(app, app.b, '?pageSize=24')).body.items.filter(item=>item.type==='DEADLINE_DECIDED');
+ assert.deepEqual(decisions.map(item=>item.outcome).sort(), ['DEADLINE_APPROVED', 'DEADLINE_EXPIRED', 'DEADLINE_REJECTED']);
+ assert(decisions.every(item=>item.href===`/orders/${order.id}` && !Object.hasOwn(item, 'metadata')));
+});
 test('notifications are private stable paged lists with unread counters and idempotent own read commands',async context=>{
  const app=await setup(context);for(let i=0;i<3;i++)await app.proposal(app.b,await app.project(app.a));const all=await list(app,app.a);assert.equal(all.response.status,200);assert.match(all.response.headers.get('cache-control'),/no-store/);assert.equal(all.body.total,3);assert.equal(all.body.unreadCount,3);const ids=[];for(let page=1;page<=3;page++)ids.push((await list(app,app.a,`?pageSize=1&page=${page}`)).body.items[0].id);assert.deepEqual(ids,all.body.items.map(row=>row.id));assert.equal((await list(app,app.a,'?page=99')).body.total,3);assert.equal((await list(app,app.other)).body.total,0);const item=all.body.items[0];assert(item.href.startsWith('/projects/'));assert(!JSON.stringify(item).includes('recipient_id'));assert.equal((await app.api(app.other,`/me/notifications/${item.id}/read`,'POST',{})).response.status,404);assert.equal((await app.api(app.a,`/me/notifications/${randomUUID()}/read`,'POST',{})).response.status,404);
  const first=await app.api(app.a,`/me/notifications/${item.id}/read`,'POST',{}),again=await app.api(app.a,`/me/notifications/${item.id}/read`,'POST',{});assert.equal(first.body.readAt,again.body.readAt);assert.equal((await list(app,app.a,'?read=read')).body.total,1);assert.equal((await list(app,app.a,'?read=unread')).body.total,2);assert.equal((await app.api(app.a,'/me/notifications/unread')).body.unreadCount,2);assert.equal((await app.api(app.a,'/me/notifications/read-all','POST',{})).body.updated,2);assert.equal((await app.api(app.a,'/me/notifications/read-all','POST',{})).body.updated,0);assert.equal((await list(app,app.a,'?read=unread')).body.total,0);

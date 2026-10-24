@@ -5,7 +5,10 @@ function requireActor(actor) {
 }
 function dto(row) {
   const href=row.moderation_action_id?'/me/warnings':row.complaint_id?`/me/complaints/${row.complaint_id}`:row.order_id?`/orders/${row.order_id}`:row.invitation_id?'/me/invitations':row.proposal_id?(row.event_type==='PROPOSAL_CREATED'?`/projects/${row.project_id}`:'/me/proposals'):row.project_id?`/projects/${row.project_id}`:null;
-  return {id:row.id,type:row.event_type,message:row.message,createdAt:new Date(row.created_at).toISOString(),readAt:row.read_at?new Date(row.read_at).toISOString():null,href};
+  const outcome = row.event_type === 'DEADLINE_DECIDED' &&
+    ['DEADLINE_APPROVED', 'DEADLINE_REJECTED', 'DEADLINE_EXPIRED'].includes(row.metadata?.status)
+    ? row.metadata.status : undefined;
+  return {id:row.id,type:row.event_type,...(outcome ? {outcome} : {}),message:row.message,createdAt:new Date(row.created_at).toISOString(),readAt:row.read_at?new Date(row.read_at).toISOString():null,href};
 }
 export function createNotificationService({repository}) {
   return {
