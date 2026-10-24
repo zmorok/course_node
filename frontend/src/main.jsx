@@ -4,21 +4,28 @@ import { SiteNavigation, WorkspaceNavigation, MobileNavigation } from './SiteNav
 import { NotificationsPage, NotificationLink } from './Notifications.jsx';
 import { navigate, isAppUrl } from './navigation.js';
 import { Icon } from './Icon.jsx';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 import { AuthPanel, AccountPanel } from './AuthPanel.jsx';
 import { authenticate, restoreSession, logout, api } from './api.js';
-import { ProfilePage, PublicProfilePage } from './ProfilePage.jsx';
-import { ProjectListPage, ProjectDetailsPage, ProjectEditorPage } from './ProjectPages.jsx';
-import { OwnProposalsPage } from './ProposalPages.jsx';
-import { FreelancerPage } from './FreelancerPage.jsx';
-import { OwnInvitationsPage } from './InvitationPages.jsx';
-import { OrderListPage, OrderDetailsPage } from './OrderPages.jsx';
-import { MyReviewsPage } from './Reviews.jsx';
-import { ComplaintsPage, WarningsPage } from './Complaints.jsx';
-import { AdminPage } from './AdminPage.jsx';
-import { AuditPage } from './AuditPage.jsx';
+
+const page = (load, name) => lazy(() => load().then(module => ({default:module[name]})));
+const ProfilePage = page(() => import('./ProfilePage.jsx'), 'ProfilePage');
+const PublicProfilePage = page(() => import('./ProfilePage.jsx'), 'PublicProfilePage');
+const ProjectListPage = page(() => import('./ProjectPages.jsx'), 'ProjectListPage');
+const ProjectDetailsPage = page(() => import('./ProjectPages.jsx'), 'ProjectDetailsPage');
+const ProjectEditorPage = page(() => import('./ProjectPages.jsx'), 'ProjectEditorPage');
+const OwnProposalsPage = page(() => import('./ProposalPages.jsx'), 'OwnProposalsPage');
+const FreelancerPage = page(() => import('./FreelancerPage.jsx'), 'FreelancerPage');
+const OwnInvitationsPage = page(() => import('./InvitationPages.jsx'), 'OwnInvitationsPage');
+const OrderListPage = page(() => import('./OrderPages.jsx'), 'OrderListPage');
+const OrderDetailsPage = page(() => import('./OrderPages.jsx'), 'OrderDetailsPage');
+const MyReviewsPage = page(() => import('./Reviews.jsx'), 'MyReviewsPage');
+const ComplaintsPage = page(() => import('./Complaints.jsx'), 'ComplaintsPage');
+const WarningsPage = page(() => import('./Complaints.jsx'), 'WarningsPage');
+const AdminPage = page(() => import('./AdminPage.jsx'), 'AdminPage');
+const AuditPage = page(() => import('./AuditPage.jsx'), 'AuditPage');
 
 function App() {
   const location = useLocation();
@@ -77,12 +84,13 @@ function App() {
   const complaintMatch = /^\/me\/complaints\/([^/]+)\/?$/.exec(location.pathname);
   const ownWarnings = /^\/me\/warnings\/?$/.test(location.pathname);
   const ownNotifications = /^\/me\/notifications\/?$/.test(location.pathname);
-  const adminView = /^\/admin(?:\/|$)/.test(location.pathname);
+  const adminView = /^\/admin(?:\/(?:audit|(?:users|complaints)(?:\/[^/]+)?))?\/?$/.test(location.pathname);
   const orderMatch = /^\/orders\/([^/]+)\/?$/.exec(location.pathname);
   const newProject = /^\/projects\/new\/?$/.test(location.pathname);
   const projectMatch = !newProject && /^\/projects\/([^/]+)(\/edit)?\/?$/.exec(location.pathname);
   const projectView = Boolean(catalog || freelancers || projectMatch && (!projectMatch[2] || user) || (newProject || ownProjects || ownProposals || ownInvitations || ownOrders || ownReviews || ownComplaints || complaintMatch || ownWarnings || ownNotifications || adminView || orderMatch) && user);
-  const profileView = Boolean(publicMatch || ownProfile && user || projectView);
+  const knownRoute = location.pathname === '/' || publicMatch || ownProfile || catalog || ownProjects || ownProposals || freelancers || ownInvitations || ownOrders || ownReviews || ownComplaints || complaintMatch || ownWarnings || ownNotifications || adminView || orderMatch || newProject || projectMatch;
+  const profileView = Boolean(!knownRoute || publicMatch || ownProfile && user || projectView);
   const workspaceView = Boolean(user && (location.pathname === '/' || location.pathname.startsWith('/me/') || adminView || orderMatch));
   const welcomeView = !profileView;
   return (
@@ -98,7 +106,7 @@ function App() {
       <div className={`app-layout${workspaceView ? ' app-layout-workspace' : ''}`}>
       {workspaceView && <WorkspaceNavigation user={user} />}
       <RouteFocus /><main id="main-content" tabIndex={-1} className={welcomeView ? user ? 'account-main' : 'welcome-main' : 'profile-main'}>
-        <React.Fragment key={`${location.pathname}${location.search}:${user?.id ?? 'guest'}`} >{projectView && restoring ? <div className="profile-card" role="status">{t("Загружаем рабочее пространство…")}</div> :
+        <Suspense fallback={<div className="profile-card" role="status">{t("Загружаем рабочее пространство…")}</div>}><React.Fragment key={`${location.pathname}${location.search}:${user?.id ?? 'guest'}`} >{!knownRoute ? <section className="profile-card"><h1>{t('Страница не найдена')}</h1><p>{t('Проверьте адрес или перейдите в каталог проектов.')}</p><Link className="text-link" href="/projects">{t('Каталог проектов')}</Link></section> : projectView && restoring ? <div className="profile-card" role="status">{t("Загружаем рабочее пространство…")}</div> :
         catalog ? <ProjectListPage user={user} /> :
         freelancers ? <FreelancerPage /> :
         ownProjects && user ? <ProjectListPage user={user} mine /> :
@@ -135,7 +143,7 @@ function App() {
         </aside>
         {user && <div className="account-connection"><div className="connection" role="status"><span className={`indicator indicator-${connection}`} aria-hidden="true" /><span>{labels[connection]}</span></div><button className="text-button" onClick={() => checkConnection()} disabled={connection === 'checking'}>{t('Проверить подключение')}</button></div>}
         </>}
-      </React.Fragment></main></div>
+      </React.Fragment></Suspense></main></div>
       <footer><span>Workify</span><span>{t("Для работы, у которой есть результат.")}</span></footer>
     </div>);
 

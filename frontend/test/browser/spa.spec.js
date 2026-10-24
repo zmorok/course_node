@@ -54,6 +54,19 @@ async function workspace(page, { authenticated = false } = {}) {
   return { documents, refreshes, errors };
 }
 
+for (const path of ['/missing-page', '/admin/missing-page']) test(`unknown route ${path} shows a translated missing page and returns to the catalog`, async ({ page }) => {
+  const app = await workspace(page, {authenticated:true});
+  await page.goto(path);
+  await expect(page.getByRole('heading', {name:'Страница не найдена', exact:true})).toBeVisible();
+  await page.locator('#interface-language').selectOption('en');
+  await expect(page.getByRole('heading', {name:'Page not found', exact:true})).toBeVisible();
+  await page.locator('main').getByRole('link', {name:'Project catalog', exact:true}).click();
+  await expect(page).toHaveURL(/\/projects$/);
+  await expect(page.getByRole('heading', {name:'Project catalog', exact:true})).toBeVisible();
+  expect(app.documents).toHaveLength(1);
+  expect(app.errors).toEqual([]);
+});
+
 test('catalog, filters, pagination and browser history keep the same document', async ({ page }) => {
   const app = await workspace(page);
   await page.goto('/');

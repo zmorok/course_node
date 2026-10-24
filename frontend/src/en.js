@@ -1,4 +1,6 @@
 export const english = {
+  "Страница не найдена": "Page not found",
+  "Проверьте адрес или перейдите в каталог проектов.": "Check the address or open the project catalog.",
   "Проверить результат": "Review result",
   "Настройки профиля": "Profile settings",
   "Безопасность": "Security",
