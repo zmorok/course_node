@@ -14,10 +14,14 @@ export async function verifySetupEnv(){
     const run=()=>exec(process.execPath,[join(directory,'scripts','setup-env.mjs')],{windowsHide:true,timeout:10000});
     const result=await run(),created=await readFile(join(directory,'.env'),'utf8');
     const password=/^POSTGRES_PASSWORD=([a-f0-9]{64})$/m.exec(created)?.[1],jwt=/^AUTH_JWT_SECRET=([a-f0-9]{64})$/m.exec(created)?.[1];
-    assert(password&&jwt);assert.notEqual(password,jwt);assert(!result.stdout.includes(password));assert(!result.stdout.includes(jwt));
+    const runtimePassword=/^APP_DB_PASSWORD=([a-f0-9]{64})$/m.exec(created)?.[1];
+    assert(password&&jwt&&runtimePassword);assert.equal(new Set([password,jwt,runtimePassword]).size,3);
+    for(const secret of [password,jwt,runtimePassword])assert(!result.stdout.includes(secret));
     await run();assert.equal(await readFile(join(directory,'.env'),'utf8'),created,'Setup must preserve existing secrets');
     const legacy='POSTGRES_PASSWORD=local-test-only\nFRONTEND_PORT=54321\n';await writeFile(join(directory,'.env'),legacy);await run();
-    const upgraded=await readFile(join(directory,'.env'),'utf8');assert(upgraded.startsWith(legacy));assert.match(upgraded,/^AUTH_JWT_SECRET=[a-f0-9]{64}$/m);
+    const upgraded=await readFile(join(directory,'.env'),'utf8');assert(upgraded.startsWith(legacy));assert.match(upgraded,/^AUTH_JWT_SECRET=[a-f0-9]{64}$/m);assert.match(upgraded,/^APP_DB_PASSWORD=[a-f0-9]{64}$/m);
+    const withJwt='AUTH_JWT_SECRET=existing-test-key\n'+legacy;await writeFile(join(directory,'.env'),withJwt);await run();
+    const runtimeUpgrade=await readFile(join(directory,'.env'),'utf8');assert(runtimeUpgrade.startsWith(withJwt));assert.match(runtimeUpgrade,/^APP_DB_PASSWORD=[a-f0-9]{64}$/m);
     console.log('PASS: README environment setup generates secrets, preserves settings and upgrades legacy configuration');
   } finally {
     assert.equal(dirname(resolve(directory)),resolve(tmpdir()));assert(basename(directory).startsWith('workify-env-'));

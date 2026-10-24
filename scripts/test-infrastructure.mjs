@@ -15,6 +15,7 @@ const environment = {
   POSTGRES_DB: 'workify_smoke',
   POSTGRES_USER: 'workify_smoke',
   POSTGRES_PASSWORD: randomBytes(32).toString('hex'),
+  APP_DB_PASSWORD: randomBytes(32).toString('hex'),
   AUTH_JWT_SECRET: randomBytes(32).toString('hex'),
   AUTH_COOKIE_SECURE: 'false',
   FRONTEND_PORT: '0',
@@ -71,6 +72,21 @@ try {
   assert.equal(await backendNode('console.log(process.versions.node.split(".")[0])'), '24');
   assert.equal(await backendNode('console.log(process.getuid())'), '1000');
   assert.equal(await backendNode('console.log(process.env.PGHOST)'), 'postgres');
+  const privileges = JSON.parse(await backendNode(`
+    import pg from 'pg';
+    const pool = new pg.Pool();
+    try {
+      const {rows:[role]} = await pool.query("SELECT current_user AS name, rolsuper, rolcreatedb, rolcreaterole, rolbypassrls FROM pg_roles WHERE rolname=current_user");
+      const denied = [];
+      for (const statement of ["CREATE TABLE workify.forbidden_runtime_table(id int)", "ALTER TABLE workify.audit_logs DISABLE TRIGGER USER", "DELETE FROM workify.audit_logs WHERE false", "TRUNCATE workify.audit_imported_entries", "UPDATE workify.schema_migrations SET name=name WHERE false"]) {
+        try { await pool.query(statement); denied.push('allowed'); } catch (error) { denied.push(error.code); }
+      }
+      console.log(JSON.stringify({role, denied}));
+    } finally { await pool.end(); }
+  `));
+  assert.deepEqual(privileges.role, {name:'workify_runtime', rolsuper:false, rolcreatedb:false, rolcreaterole:false, rolbypassrls:false});
+  assert.deepEqual(privileges.denied, Array(5).fill('42501'));
+  console.log('PASS: API uses a separate restricted database role; schema changes, history deletion and migration ledger writes are forbidden');
   assert.equal(await sql("SELECT current_setting('server_version_num')::int / 10000"), '17');
   assert.equal(await sql('SELECT count(*) FROM workify.schema_migrations'), '8');
   assert.equal(await sql("SELECT count(*) FROM information_schema.tables WHERE table_schema='workify' AND table_type='BASE TABLE'"), '32');
@@ -86,7 +102,7 @@ try {
 
   for (const script of ['test', 'test:integration']) {
     const result = await compose('run', '--rm', '--no-deps', '--volume', './backend/test:/app/test:ro',
-      '-e', 'WORKIFY_DB_TESTS=1', 'backend', 'npm', 'run', script);
+      '-e', 'WORKIFY_DB_TESTS=1', '-e', 'PGUSER=workify_smoke', '-e', `PGPASSWORD=${environment.POSTGRES_PASSWORD}`, 'backend', 'npm', 'run', script);
     console.log(result.stdout.trim());
   }
   const clientTests = await compose('run', '--rm', '--no-deps', '--volume', './frontend/test:/app/test:ro',
