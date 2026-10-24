@@ -37,6 +37,7 @@ function FieldProblem({ problem, name }) {
 }
 
 export function ProfilePage({ user, onUserChange }) {
+  const [tab, setTab] = useState('data');
   const [profile, setProfile] = useState(null),[catalog, setCatalog] = useState([]);
   const [draft, setDraft] = useState({}),[selected, setSelected] = useState([]),[savedIds, setSavedIds] = useState([]);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -92,8 +93,10 @@ export function ProfilePage({ user, onUserChange }) {
     <div className="profile-page-heading"><div><p className="eyebrow">{t("Ваше рабочее пространство")}</p><h1>{isClient ? t("Мой профиль") : t("Профиль аккаунта")}</h1>
       <p className="profile-subtitle">{isClient ? t("Расскажите о себе и выберите навыки для будущих проектов.") : t("Ваши персональные и контактные данные.")}</p></div>
       <Link className="text-link" href="/">{t("← К аккаунту")}</Link></div>
+    <nav className="invitation-tabs profile-tabs" aria-label={t('Настройки профиля')}>{[['data', t('Личные данные')], ['security', t('Безопасность')], ...(isClient ? [['portfolio', t('Портфолио')]] : [])].map(([id, label]) => <button type="button" className="text-button" key={id} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}</nav>
     <div className="profile-layout">
       <div className="profile-editor">
+        <div className="profile-editor" hidden={tab !== 'data'}>
         <section className="profile-card" aria-labelledby="profile-data-title">
           <h2 id="profile-data-title">{t("Личные данные")}</h2><p className="profile-help">{t("Email и телефон скрыты в публичном профиле. Для смены email потребуется текущий пароль.")}</p>
           <Problems problem={profileError} />
@@ -136,7 +139,7 @@ export function ProfilePage({ user, onUserChange }) {
               <button type="button" className="secondary" disabled={!skillsDirty} onClick={() => {setSelected(savedIds);setSkillsError(null);setSkillsMessage('');}}>{t("Отменить выбор")}</button></div>
           </fieldset></form><p className="save-message" role="status">{t(skillsMessage)}</p>
         </section>}
-        <PasswordChange />{isClient && <PortfolioPanel userId={user.id} editable />}
+        </div><div hidden={tab !== 'security'}><PasswordChange /></div>{isClient && <div hidden={tab !== 'portfolio'}><PortfolioPanel userId={user.id} editable /></div>}
       </div>
       <aside className="profile-card profile-summary" aria-label={t("Сохранённые данные профиля")}>
         <ProfileIdentity profile={profile}><span className="role-badge">{isClient ? t("Клиент") : t("Администратор")}</span></ProfileIdentity>
@@ -164,6 +167,6 @@ export function PublicProfilePage({ userId, user }) {
       <div className="profile-ratings"><div><strong>{profile.customerRating ?? '—'}</strong><span>{t("Как заказчик")}</span><small>{t("Отзывов: ")}{profile.customerReviewCount}</small></div>
         <div><strong>{profile.freelancerRating ?? '—'}</strong><span>{t("Как исполнитель")}</span><small>{t("Отзывов: ")}{profile.freelancerReviewCount}</small></div></div></section>
       <div className="profile-editor"><section className="profile-card"><h2>{t("О себе")}</h2><p className="public-description">{profile.description || t("Пользователь пока не добавил описание.")}</p></section>
-        <section className="profile-card"><h2>{t("Навыки")}</h2>{profile.skills.length ? <div className="profile-tags">{profile.skills.map((skill) => <span key={skill.id}>{t(skill.name)}</span>)}</div> : <p className="profile-help">{t("Навыки пока не указаны.")}</p>}</section><PublicReviews key={userId} userId={userId} /><InvitationComposer key={`${profile.id}-${user?.id ?? 'guest'}`} profile={profile} user={user} /><PortfolioPanel userId={userId} /></div></div>
+        <section className="profile-card"><h2>{t("Навыки")}</h2>{profile.skills.length ? <div className="profile-tags">{profile.skills.map((skill) => <span key={skill.id}>{t(skill.name)}</span>)}</div> : <p className="profile-help">{t("Навыки пока не указаны.")}</p>}</section><InvitationComposer key={`${profile.id}-${user?.id ?? 'guest'}`} profile={profile} user={user} /><PortfolioPanel userId={userId} /><PublicReviews key={userId} userId={userId} /></div></div>
   </>;
 }

@@ -7,6 +7,7 @@ import { uploadFile } from './files.js';
 import { FileLink } from './PortfolioPanel.jsx';
 import { ProjectProposals } from './ProposalPages.jsx';
 import { InvitationList } from './InvitationPages.jsx';
+import { Icon } from './Icon.jsx';
 
 const statuses = () => ({ DRAFT: t("Черновик"), OPEN: t("Открыт"), IN_PROGRESS: t("В работе"), COMPLETED: t("Завершён"), CANCELLED: t("Отменён") });
 const money = (value) => value === null ? t("Бюджет не указан") : new Intl.NumberFormat(locale(), { maximumFractionDigits: 2 }).format(Number(value));
@@ -15,15 +16,15 @@ function AccessDenied() {return <section className="profile-card"><h1>{t("Раз
 function Badge({ status }) {return <StatusBadge status={status} labels={statuses()} />;}
 function Tags({ skills }) {return <div className="profile-tags">{skills.map((skill) => <span key={skill.id}>{t(skill.name)}</span>)}</div>;}
 function ProjectCard({ project }) {return <article className="profile-card project-card">
-  <div className="project-card-top"><span className="project-category">{t(project.category?.name) ?? t("Категория не выбрана")}</span><Badge status={project.status} />{project.isOwn && <span className="project-own">{t("Ваш проект")}</span>}</div>
-  <h2><Link href={`/projects/${project.id}`}>{project.title}</Link></h2><p className="project-excerpt">{project.description.slice(0, 200) || t("Описание пока не добавлено.")}</p>
-  <Tags skills={project.skills} /><div className="project-card-bottom"><strong>{money(project.budget)}</strong><span>{t("Срок: ")}{date(project.desiredDeadlineAt)}</span><Link className="text-link" href={`/projects/${project.id}`}>{t("Подробнее ↗")}</Link></div>
+  <div className="project-card-heading"><div><h2><Link href={`/projects/${project.id}`}>{project.title}</Link></h2><p className="project-excerpt">{project.description.slice(0, 200) || t("Описание пока не добавлено.")}</p></div><div className="project-card-badges"><Badge status={project.status} />{project.isOwn && <span className="project-own">{t("Ваш проект")}</span>}</div></div>
+  <div className="project-card-facts"><dl><div><dt>{t('Категория')}</dt><dd>{t(project.category?.name) ?? t('Категория не выбрана')}</dd></div><div><dt>{t('Бюджет')}</dt><dd>{money(project.budget)}</dd></div><div><dt>{t('Желаемый срок')}</dt><dd>{date(project.desiredDeadlineAt)}</dd></div></dl><Tags skills={project.skills} /></div>
 </article>;}
 
 export function ProjectListPage({ user, mine = false }) {
   const path = mine ? '/me/projects' : '/projects',query = getLocation().search;
   const initial = Object.fromEntries(new URLSearchParams(query));
   const [filters, setFilters] = useState({ search: initial.search ?? '', category: initial.category ?? '', skill: initial.skill ?? '', minBudget: initial.minBudget ?? '', maxBudget: initial.maxBudget ?? '', sort: initial.sort ?? 'newest', status: initial.status ?? '' });
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [data, setData] = useState(null),[categories, setCategories] = useState([]),[skills, setSkills] = useState([]),[error, setError] = useState(null),[attempt, setAttempt] = useState(0),[loading, setLoading] = useState(true);
   useEffect(() => {
     if (mine && user?.role !== 'CLIENT') return;
@@ -38,14 +39,16 @@ export function ProjectListPage({ user, mine = false }) {
   const field = (key, label, type = 'text') => <div className="field"><label htmlFor={`filter-${key}`}>{label}</label><input id={`filter-${key}`} type={type} value={filters[key]} min={type === 'number' ? '0' : undefined} step={type === 'number' ? '0.01' : undefined} maxLength={key === 'search' ? 100 : undefined} onChange={(event) => setFilters({ ...filters, [key]: event.target.value })} /></div>;
   const select = (key, label, options) => <div className="field"><label htmlFor={`filter-${key}`}>{label}</label><select id={`filter-${key}`} value={filters[key]} onChange={(event) => setFilters({ ...filters, [key]: event.target.value })}>{options.map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></div>;
   return <><div className="profile-page-heading"><div><p className="eyebrow">{mine ? t("Ваши задачи и идеи") : t("Работа начинается здесь")}</p><h1>{mine ? t("Мои проекты") : t("Каталог проектов")}</h1><p className="profile-help">{mine ? t("От черновика до результата — все ваши проекты в одном месте.") : t("Открытые задачи для разработчиков, дизайнеров и IT-команд.")}</p></div>
-    {user?.role === 'CLIENT' && <Link className="button-link" href={mine ? '/projects/new' : '/me/projects'}>{mine ? t("+ Создать проект") : t("Мои проекты ↗")}</Link>}</div>
+    {user?.role === 'CLIENT' && <Link className="button-link" href="/projects/new"><Icon name="plus" />{t("Создать проект")}</Link>}</div>
     <div className="projects-layout"><aside className="profile-card project-filters"><form onSubmit={filter}><h2>{t("Поиск и фильтры")}</h2>{field('search', t("Поиск по проектам"))}
+      <button type="button" className="secondary filter-toggle" aria-expanded={filtersExpanded} aria-controls="project-filter-fields" onClick={() => setFiltersExpanded(value => !value)}><Icon name="ellipsis-horizontal" />{t('Поиск и фильтры')}<Icon name="chevron-down" /></button>
+      <div id="project-filter-fields" className={`filter-fields${filtersExpanded ? ' is-open' : ''}`}>
       {select('category', t("Категория"), [['', t("Все категории")], ...categories.map((category) => [category.slug, t(category.name)])])}
       {select('skill', t("Навык"), [['', t("Любой навык")], ...skills.map((skill) => [skill.slug, t(skill.name)])])}
       <div className="budget-filters">{field('minBudget', t("Бюджет от"), 'number')}{field('maxBudget', t("Бюджет до"), 'number')}</div>
       {mine && select('status', t("Статус"), [['', t("Все статусы")], ...Object.entries(statuses())])}
       {select('sort', t("Сортировка"), [['newest', t("Сначала новые")], ['oldest', t("Сначала старые")], ['budget_desc', t("Бюджет по убыванию")], ['budget_asc', t("Бюджет по возрастанию")], ['deadline_asc', t("Ближайший срок")]])}
-      <button type="submit" className="submit">{t("Применить фильтры ")}<span aria-hidden="true">↗</span></button><Link className="filter-reset text-link" href={path}>{t("Сбросить")}</Link>
+      <button type="submit" className="submit">{t("Применить фильтры ")}<Icon name="check" /></button><Link className="filter-reset text-link" href={path}>{t("Сбросить")}</Link></div>
     </form></aside><section className="project-results" aria-label={mine ? t("Ваши проекты") : t("Открытые проекты")}>
       {loading ? <div className="profile-card" role="status">{t("Загружаем проекты…")}</div> : error ? <div className="profile-card"><ErrorMessage error={error} /><button className="secondary" onClick={() => setAttempt((value) => value + 1)}>{t("Повторить")}</button></div> : <>
         <p className="project-result-count" role="status">{t("Найдено проектов: ")}{data.total}</p>{data.items.map((project) => <ProjectCard key={project.id} project={project} />)}

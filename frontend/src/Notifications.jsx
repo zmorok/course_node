@@ -3,11 +3,12 @@ import { Link } from './Navigation.jsx';
 import { uiMessage, t, locale, notificationTitle } from "./i18n.js";import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
 import { useRemote, RemoteState, ErrorMessage, Pages, listPage } from './Ui.jsx';
+import { Icon } from './Icon.jsx';
 
 export function NotificationLink({ current }) {
   const [count, setCount] = useState(null);
   useEffect(() => {let active = true;const refresh = () => {if (document.visibilityState !== 'visible') return;api('/me/notifications/unread').then((data) => {if (active) setCount(data.unreadCount);}).catch(() => {});};refresh();const timer = setInterval(refresh, 60000);window.addEventListener('focus', refresh);window.addEventListener('workify:notifications', refresh);return () => {active = false;clearInterval(timer);window.removeEventListener('focus', refresh);window.removeEventListener('workify:notifications', refresh);};}, []);
-  return <Link href="/me/notifications" aria-current={current ? 'page' : undefined}>{t("Уведомления")}{count > 0 && <span className="notification-count" aria-label={t("Непрочитанных: {0}", [count])}>{count > 99 ? '99+' : count}</span>}</Link>;
+  return <Link className="icon-button notification-link" href="/me/notifications" aria-label={t("Уведомления")} title={t("Уведомления")} aria-current={current ? 'page' : undefined}><Icon name="bell" />{count > 0 && <span className="notification-count" aria-label={t("Непрочитанных: {0}", [count])}>{count > 99 ? '99+' : count}</span>}</Link>;
 }
 export function NotificationsPage() {
   const remote = useRemote(`/me/notifications${getLocation().search}`),[busy, setBusy] = useState(false),[error, setError] = useState(null),[notice, setNotice] = useState('');
