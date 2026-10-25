@@ -7,6 +7,9 @@ coverage/
 *.log
 *.pid
 
+# Documentation is deferred until the final project stage
+/docs/
+
 # Local configuration and secrets; safe templates may be versioned
 .env
 .env.*
