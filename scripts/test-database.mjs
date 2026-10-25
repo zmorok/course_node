@@ -49,6 +49,34 @@ async function testMigrationRecovery() {
   console.log('PASS: failed migration rolls back its DDL and ledger; corrected migration resumes');
 }
 
+async function testMigrationRegistration() {
+  const database = 'workify_migration_registration';
+  await query(`CREATE DATABASE ${database}`);
+  await migrate(database);
+  const userId = randomUUID();
+  await query(`INSERT INTO workify.users (id,email,username,password_hash)
+      VALUES ('${userId}','migration-probe@example.invalid','migration_probe','test-only-hash');
+    INSERT INTO workify.profiles (user_id,first_name,last_name)
+      VALUES ('${userId}','Migration','Probe');`, database);
+  const ledger = await query('SELECT jsonb_agg(to_jsonb(m) ORDER BY version) FROM workify.schema_migrations m', database);
+  await docker('exec', container, 'cp', '-R', '/tmp/database', '/tmp/database-new');
+  // Add the example only inside the disposable container, with the public two-line interface.
+  await docker('exec', container, 'sh', '-c', String.raw`
+    printf '%s\n' 'ALTER TABLE workify.profiles ADD COLUMN migration_probe text;' > /tmp/database-new/migrations/009_migration_probe.sql
+    sed '/^SELECT pg_advisory_unlock/d' /tmp/database/migrate.sql > /tmp/database-new/migrate.sql
+    printf '%s\n' '\set migration 009_migration_probe' '\ir apply-migration.sql' 'SELECT pg_advisory_unlock(173204, 2);' >> /tmp/database-new/migrate.sql
+  `);
+  await psql(['-f', '/tmp/database-new/migrate.sql'], database);
+  assert.equal(await query("SELECT name FROM workify.schema_migrations WHERE version=9", database), 'migration_probe');
+  assert.equal(await query(`SELECT first_name || ':' || last_name || ':' || (migration_probe IS NULL)::text
+    FROM workify.profiles WHERE user_id='${userId}'`, database), 'Migration:Probe:true');
+  assert.equal(await query('SELECT jsonb_agg(to_jsonb(m) ORDER BY version) FROM workify.schema_migrations m WHERE version<=8', database), ledger);
+  const applied = await query('SELECT jsonb_agg(to_jsonb(m) ORDER BY version) FROM workify.schema_migrations m', database);
+  await psql(['-f', '/tmp/database-new/migrate.sql'], database);
+  assert.equal(await query('SELECT jsonb_agg(to_jsonb(m) ORDER BY version) FROM workify.schema_migrations m', database), applied);
+  console.log('PASS: two-line migration registration adds a column, preserves data and old ledger, and skips a repeated run');
+}
+
 async function testConcurrentOrders() {
   const ids = Object.fromEntries(['customer', 'freelancer', 'other', 'project', 'proposal', 'invitation']
     .map(name => [name, randomUUID()]));
@@ -128,6 +156,7 @@ try {
     console.log(result.stdout.trim());
   }
   await testMigrationRecovery();
+  await testMigrationRegistration();
   await testConcurrentOrders();
   console.log('All database checks passed.');
 } catch (error) {
