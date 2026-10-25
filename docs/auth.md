@@ -70,7 +70,6 @@ Helmet устанавливает заголовки безопасности AP
 ## Проверки и источники
 
 ```powershell
-node scripts/test-database.mjs
 node scripts/test-infrastructure.mjs
 ```
 

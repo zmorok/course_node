@@ -1,30 +1,32 @@
--- Called by migrate.sql while it holds the migration advisory lock.
--- migration is a numbered filename without .sql, e.g. 009_profile_site.
-SELECT substring(:'migration' FROM '^([0-9]{3})_')::integer AS migration_version,
-       substring(:'migration' FROM '^[0-9]{3}_(.+)$') AS migration_default_name
-\gset
+\set ON_ERROR_STOP on
 
-\if :{?migration_name}
-\else
-    \set migration_name :migration_default_name
-\endif
-\set migration_file migrations/ :migration .sql
+BEGIN;
+-- Serialize concurrent runners until this migration is committed or rolled back.
+SELECT pg_advisory_xact_lock(173204, 2);
 
+CREATE SCHEMA IF NOT EXISTS workify;
+CREATE TABLE IF NOT EXISTS workify.schema_migrations (
+    version integer PRIMARY KEY CHECK (version > 0),
+    name text NOT NULL CHECK (btrim(name) <> ''),
+    applied_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- The numeric filename prefix is the migration's version.
+SELECT split_part(:'migration', '_', 1)::integer AS migration_version \gset
 SELECT NOT EXISTS (
     SELECT FROM workify.schema_migrations WHERE version = :migration_version
 ) AS apply_migration \gset
 
 \if :apply_migration
-    BEGIN;
+    \set migration_file migrations/ :migration
     \ir :migration_file
-    \if :{?migration_seed}
-        \ir :migration_seed
-    \endif
     INSERT INTO workify.schema_migrations (version, name)
-    VALUES (:migration_version, :'migration_name');
-    COMMIT;
+    VALUES (:migration_version, :'migration');
 \endif
 
--- Optional settings belong only to this entry, including when it was skipped.
-\unset migration_name
-\unset migration_seed
+COMMIT;
+\if :apply_migration
+    \echo Applied: :migration
+\else
+    \echo Already applied: :migration
+\endif
