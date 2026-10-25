@@ -12,6 +12,7 @@ const project = `workify-smoke-${randomUUID().slice(0, 8)}`;
 const environment = {
   ...process.env,
   COMPOSE_PROJECT_NAME: project,
+  CONTAINER_NAME_PREFIX: `${project}-`,
   POSTGRES_DB: 'workify_smoke',
   POSTGRES_USER: 'workify_smoke',
   POSTGRES_PASSWORD: randomBytes(32).toString('hex'),

@@ -19,7 +19,7 @@ docker compose up --build -d --wait
 - [Backend health](http://localhost:3000/api/health) — готовность API, PostgreSQL и каталога файлов.
 - [Health через frontend](http://localhost:5173/api/health) — тот же запрос через внутреннее проксирование.
 
-Для запуска с выводом логов в текущий терминал используется `docker compose up --build`. Обычный `docker compose down` останавливает и удаляет контейнеры, сохраняя оба именованных volume. Следующий `docker compose up -d --wait` использует сохранённые данные.
+Для запуска с выводом логов в текущий терминал используется `docker compose up --build`. Обычный `docker compose down` останавливает и удаляет контейнеры, сохраняя именованные volumes. Следующий `docker compose up -d --wait` использует сохранённые данные.
 
 ## Сервисы и порядок запуска
 
@@ -41,7 +41,7 @@ flowchart LR
     backend --- uploads_data[(uploads_data)]
 ```
 
-[compose.yaml](../compose.yaml) не задаёт container_name: имена и volumes относятся к Compose project, что позволяет поднимать независимый тестовый проект. По умолчанию проект называется workify. Публикуемые frontend/backend порты привязаны к loopback хоста; браузер обращается к API по относительному `/api`, а имя Docker-сервиса `backend` используется только сервером frontend. CORS для этого пути не требуется.
+[compose.yaml](../compose.yaml) задаёт через `container_name` имена `frontend`, `backend`, `postgres` и `migrate` без суффикса `-1`. По умолчанию проект называется workify; сеть и volumes сохраняют префикс проекта. Для параллельного независимого проекта нужно задать собственные `COMPOSE_PROJECT_NAME`, `CONTAINER_NAME_PREFIX` (например, `workify-test-`) и порты. Smoke runner задаёт уникальный префикс контейнеров автоматически. Публикуемые frontend/backend порты привязаны к loopback хоста; браузер обращается к API по относительному `/api`, а имя Docker-сервиса `backend` используется только сервером frontend. CORS для этого пути не требуется.
 
 Frontend собирается Vite через `npm ci` и `npm run build`. В runtime image остаются dist и необходимые серверные зависимости, без Vite/dev server. Express отдаёт статику и SPA fallback; http-proxy-middleware передаёт `/api` в backend с сохранением префикса. Ошибки backend не подменяются index.html, отсутствующие assets возвращают 404. Nginx не требуется.
 
@@ -51,7 +51,8 @@ Frontend собирается Vite через `npm ci` и `npm run build`. В ru
 
 | Переменная .env | Значение по умолчанию / назначение |
 |---|---|
-| COMPOSE_PROJECT_NAME | workify; префикс имён ресурсов Compose |
+| COMPOSE_PROJECT_NAME | workify; имя проекта и префикс сети и volumes |
+| CONTAINER_NAME_PREFIX | Пустой; необязательный префикс имён контейнеров для параллельного проекта |
 | POSTGRES_DB | workify |
 | POSTGRES_USER | workify |
 | POSTGRES_PASSWORD | Пароль владельца БД/мигратора, генерируется setup-env |
@@ -75,8 +76,9 @@ docker compose run --rm migrate
 |---|---|---|
 | postgres_data | postgres:/var/lib/postgresql/data | Кластер, таблицы, справочники и журнал миграций |
 | uploads_data | backend:/app/uploads | Загруженные пользовательские файлы, независимо от жизни контейнера |
+| migrate_data | migrate:/var/lib/postgresql/data | Служебный каталог образа PostgreSQL у мигратора; обычно пуст, миграции подключаются к отдельному postgres |
 
-При стандартном имени проекта Docker создаёт workify_postgres_data и workify_uploads_data. Пересоздание `docker compose up -d --force-recreate --wait` заменяет контейнеры, сохраняя volumes. Каталог uploads не раздаётся как публичная статика: FileService проверяет доступ к каждому вложению. В БД остаются только метаданные файлов.
+При стандартном имени проекта Docker создаёт workify_postgres_data, workify_uploads_data и workify_migrate_data. Явный том migrate_data заменяет автоматический анонимный том образа PostgreSQL и сохраняет понятное имя при пересоздании мигратора. Пересоздание `docker compose up -d --force-recreate --wait` заменяет контейнеры, сохраняя volumes. Каталог uploads не раздаётся как публичная статика: FileService проверяет доступ к каждому вложению. В БД остаются только метаданные файлов.
 
 ## Health и диагностика
 
@@ -124,6 +126,6 @@ Runner также проверяет JSON 404 с requestId через frontend p
 
 Изучены ППО `lab06/lab06-ppo-deployment diagram.drawio`, README ООП-приложения и старый `db/init.sql`; дополнительно сопоставлены `_материалы/Workify_STSR_Project_Specification_v4/infra/README.md` и `docs/06_system_architecture.md`. Корни исторических источников приведены в [предметной модели](domain-model.md).
 
-Сохранено разделение browser → API → PostgreSQL и файлового хранилища. Старые ASP.NET/EF, отдельный storage server/S3, moderator, платежи и демонстрационные пароли не переносятся. Для текущей курсовой используются React/Express/pg, два named volumes и роли CLIENT/ADMIN; файлы доступны через общий FileService.
+Сохранено разделение browser → API → PostgreSQL и файлового хранилища. Старые ASP.NET/EF, отдельный storage server/S3, moderator, платежи и демонстрационные пароли не переносятся. Для текущей курсовой используются React/Express/pg, два тома рабочих данных, служебный том мигратора и роли CLIENT/ADMIN; файлы доступны через общий FileService.
 
 Версии runtime и поведение сервера статики сверены с [официальной таблицей Node.js releases](https://nodejs.org/en/about/previous-releases) и [документацией Vite о static deployment](https://vite.dev/guide/static-deploy.html). Синтаксис маршрутов и proxy — с [Express 5](https://expressjs.com/en/guide/migrating-5/) и [http-proxy-middleware](https://github.com/chimurai/http-proxy-middleware).

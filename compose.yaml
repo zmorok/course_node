@@ -2,6 +2,7 @@ name: workify
 
 services:
   postgres:
+    container_name: ${CONTAINER_NAME_PREFIX:-}postgres
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-workify}
@@ -18,6 +19,7 @@ services:
     restart: unless-stopped
 
   migrate:
+    container_name: ${CONTAINER_NAME_PREFIX:-}migrate
     image: postgres:17-alpine
     environment:
       PGHOST: postgres
@@ -29,6 +31,7 @@ services:
       WORKIFY_RUNTIME_PASSWORD: ${APP_DB_PASSWORD:?Run node scripts/setup-env.mjs to add the runtime database password}
     volumes:
       - ./database:/migrations:ro
+      - migrate_data:/var/lib/postgresql/data
     command: ["psql", "-X", "-v", "ON_ERROR_STOP=1", "-f", "/migrations/migrate.sql", "-f", "/migrations/runtime-role.sql"]
     depends_on:
       postgres:
@@ -36,6 +39,7 @@ services:
     restart: "no"
 
   backend:
+    container_name: ${CONTAINER_NAME_PREFIX:-}backend
     build:
       context: ./backend
     environment:
@@ -76,6 +80,7 @@ services:
     restart: unless-stopped
 
   frontend:
+    container_name: ${CONTAINER_NAME_PREFIX:-}frontend
     build:
       context: ./frontend
     environment:
@@ -99,3 +104,4 @@ services:
 volumes:
   postgres_data:
   uploads_data:
+  migrate_data:
