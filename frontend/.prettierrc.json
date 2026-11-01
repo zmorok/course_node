@@ -1,0 +1,14 @@
+{
+  "printWidth": 100,
+  "objectWrap": "collapse",
+  "tabWidth": 2,
+  "useTabs": false,
+  "singleQuote": true,
+  "quoteProps": "preserve",
+  "jsxSingleQuote": false,
+  "singleAttributePerLine": false,
+  "semi": true,
+  "trailingComma": "all",
+  "endOfLine": "lf",
+  "embeddedLanguageFormatting": "off"
+}
