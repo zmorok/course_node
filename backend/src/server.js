@@ -78,7 +78,7 @@ try {
   const notificationService=createNotificationService({repository:createNotificationRepository(pool)});
   const auditService=createAuditService({repository:createAuditRepository(pool),transaction:op=>withTransaction(pool,client=>op(createAuditRepository(client)))});
   const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService, adminService, auditService, notificationService });
-  const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes });
+  const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes, trustProxyHops: config.trustProxyHops });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));
     listener.once('error', reject);

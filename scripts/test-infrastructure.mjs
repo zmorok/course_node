@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -9,6 +10,9 @@ import {verifySetupEnv} from './verify-setup-env.mjs';
 const exec = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
 const project = `workify-smoke-${randomUUID().slice(0, 8)}`;
+const frontendDirectory = fileURLToPath(new URL('../frontend/', import.meta.url));
+const testDirectory = fileURLToPath(new URL(`../runtime/${project}/`, import.meta.url));
+const bundleDirectory = join(testDirectory, 'bundle');
 const environment = {
   ...process.env,
   COMPOSE_PROJECT_NAME: project,
@@ -21,6 +25,7 @@ const environment = {
   AUTH_COOKIE_SECURE: 'false',
   FRONTEND_PORT: '0',
   BACKEND_PORT: '0',
+  WORKIFY_BUNDLE_DIR: bundleDirectory,
 };
 const prefix = ['compose', '--project-name', project, '--env-file', '.env.example', '--file', 'compose.yaml'];
 let created = false;
@@ -31,6 +36,24 @@ async function docker(...args) {
 
 async function compose(...args) {
   return docker(...prefix, ...args);
+}
+
+async function buildFrontend() {
+  const result = await exec(process.execPath, ['node_modules/vite/bin/vite.js', 'build'], {
+    cwd: frontendDirectory, env: environment, windowsHide: true, timeout: 120_000,
+  });
+  console.log(result.stdout.trim());
+}
+
+async function waitForHealth(base) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    try {
+      const response = await request(`${base}/api/health`);
+      if (response.status === 200) return;
+    } catch {}
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  assert.fail('Proxy did not reconnect to the backend after container recreation');
 }
 
 async function sql(query) {
@@ -66,9 +89,10 @@ try {
   console.log(`Checking Compose in an isolated project: ${project}`);
   await verifySetupEnv();
   await compose('config', '--quiet');
+  await buildFrontend();
   created = true;
   await compose('up', '--build', '-d', '--wait', '--wait-timeout', '120');
-  let frontend = await serviceUrl('frontend', 8080);
+  let frontend = await serviceUrl('proxy', 8080);
   let backend = await serviceUrl('backend', 3000);
   assert.equal(await backendNode('console.log(process.versions.node.split(".")[0])'), '24');
   assert.equal(await backendNode('console.log(process.getuid())'), '1000');
@@ -100,14 +124,18 @@ try {
   const missingBody = await missing.json();
   assert.equal(missingBody.error.code, 'NOT_FOUND');
   assert.equal(missingBody.requestId, missing.headers.get('x-request-id'));
+  const apiRoot = await request(`${frontend}/api`);
+  assert.equal(apiRoot.status, 404);
+  assert.equal((await apiRoot.json()).error.code, 'NOT_FOUND', '/api must reach the backend rather than the SPA');
 
   for (const script of ['test', 'test:integration']) {
     const result = await compose('run', '--rm', '--no-deps', '--volume', './backend/test:/app/test:ro',
       '-e', 'WORKIFY_DB_TESTS=1', '-e', 'PGUSER=workify_smoke', '-e', `PGPASSWORD=${environment.POSTGRES_PASSWORD}`, 'backend', 'npm', 'run', script);
     console.log(result.stdout.trim());
   }
-  const clientTests = await compose('run', '--rm', '--no-deps', '--volume', './frontend/test:/app/test:ro',
-    '--volume', './frontend/src:/app/src:ro', 'frontend', 'npm', 'test');
+  const clientTests = await docker('run', '--rm', '--network', 'none',
+    '--mount', `type=bind,source=${frontendDirectory},target=/app,readonly`,
+    '--workdir', '/app', 'node:24-alpine', 'npm', 'test');
   console.log(clientTests.stdout.trim());
 
   const authHeaders = { 'Content-Type': 'application/json', 'X-Workify-Client': 'browser' };
@@ -125,7 +153,7 @@ try {
   assert.equal((await request(`${frontend}/api/admin/access`, { headers: authorization })).status, 403);
   const skillCatalog = await (await request(`${frontend}/api/skills`)).json();
   const profileSkillId = skillCatalog.skills[0].id;
-  const profileChange = await request(`${frontend}/api/me/profile`, { method: 'PATCH', headers: { ...authHeaders, ...authorization },
+  const profileChange = await request(`${frontend}/api/me/profile`, { method: 'PATCH', headers: { ...authHeaders, ...authorization, 'X-Forwarded-For': '203.0.113.123' },
     body: JSON.stringify({ firstName: 'Smoke updated', headline: 'Сохранённый профиль', phone: '+375291234567' }) });
   assert.equal(profileChange.status, 200);
   const skillChange = await request(`${frontend}/api/me/skills`, { method: 'PUT', headers: { ...authHeaders, ...authorization },
@@ -137,10 +165,11 @@ try {
   assert.equal(publicProfile.skills[0].id, profileSkillId);
   assert(!Object.hasOwn(publicProfile, 'email')); assert(!Object.hasOwn(publicProfile, 'phone'));
   console.log('PASS: profile editing, persisted skills and private contact isolation through the frontend proxy');
-  const fileText='Портфолио: файл должен пережить замену контейнера';
+  const fileText='Портфолио: файл должен пережить замену контейнера\n'.repeat(30_000);
   const form=new FormData();form.append('file',new Blob([fileText],{type:'text/plain'}),'Результат.txt');
   const uploaded=await request(`${frontend}/api/files`,{method:'POST',headers:authorization,body:form});
   assert.equal(uploaded.status,201);
+  assert(Buffer.byteLength(fileText) > 1024 * 1024, 'Upload must exceed the default Nginx 1 MiB request limit');
   const storedFile=(await uploaded.json()).file;
   assert.equal((await request(`${frontend}/api/files/${storedFile.id}`)).status,404,'Unattached uploads are private');
   const portfolioCreated=await request(`${frontend}/api/me/portfolio`,{method:'POST',headers:{...authHeaders,...authorization},
@@ -250,7 +279,7 @@ try {
   console.log('PASS: admin complaint context, claim and atomic linked warning resolution through the proxy');
   const notifications=await (await request(`${frontend}/api/me/notifications?read=unread&pageSize=24`,{headers:authorHeaders})).json();assert(notifications.unreadCount>0);const completionNotice=notifications.items.find(item=>item.type==='COMPLAINT_RESOLVED');assert(completionNotice);const readNotice=await (await request(`${frontend}/api/me/notifications/${completionNotice.id}/read`,{method:'POST',headers:authorHeaders,body:'{}'})).json();assert(readNotice.readAt);assert.equal((await request(`${frontend}/api/me/notifications/${completionNotice.id}/read`,{method:'POST',headers:{...authHeaders,...authorization},body:'{}'})).status,404);
   console.log('PASS: private notification center unread counts and owner-only read marking through the proxy');
-  const auditPath=`${frontend}/api/admin/audit?entityId=${account.user.id}&action=PROFILE_UPDATED`;const profileAudit=await (await request(auditPath,{headers:moderatorHeaders})).json();assert.equal(profileAudit.total,1);assert.equal(profileAudit.items[0].oldData.firstName,'Smoke');assert.equal(profileAudit.items[0].newData.firstName,'Smoke updated');assert(profileAudit.items[0].ip);assert(profileAudit.items[0].metadata.requestId);
+  const auditPath=`${frontend}/api/admin/audit?entityId=${account.user.id}&action=PROFILE_UPDATED`;const profileAudit=await (await request(auditPath,{headers:moderatorHeaders})).json();assert.equal(profileAudit.total,1);assert.equal(profileAudit.items[0].oldData.firstName,'Smoke');assert.equal(profileAudit.items[0].newData.firstName,'Smoke updated');assert(profileAudit.items[0].ip);assert.notEqual(profileAudit.items[0].ip,'203.0.113.123','Nginx must overwrite client-supplied forwarded IP headers');assert(profileAudit.items[0].metadata.requestId);
   const operatorAudit=await (await request(`${frontend}/api/admin/audit?entityId=${moderator.user.id}&action=ADMIN_GRANTED`,{headers:moderatorHeaders})).json();assert.equal(operatorAudit.total,1);assert.equal(operatorAudit.items[0].actor,null);assert.equal(operatorAudit.items[0].newData.role,'ADMIN');assert.equal((await request(auditPath,{headers:authorHeaders})).status,403);
   console.log('PASS: centralized admin-only audit, profile snapshots, request context and operator promotion through the proxy');
   assert.equal((await request(`${frontend}/api/me/orders`,{headers:authorization})).status,403);
@@ -259,6 +288,7 @@ try {
   const page = await request(frontend);
   assert.equal(page.status, 200);
   const html = await page.text();
+  assert.match(page.headers.get('cache-control'), /no-cache/);
   assert.match(html, /Workify/);
   assert.match(html, /<html lang="ru">/);
   const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^\"]+)"/g)].map(match => match[1]);
@@ -271,18 +301,40 @@ try {
     ['/assets/workify/fonts/InterVariable.woff2', /^font\/woff2\b/],
   ]) {
     const response = await request(`${frontend}${asset}`);
-    assert.equal(response.status, 200, `${asset} must be included in the Docker build`);
+    assert.equal(response.status, 200, `${asset} must be included in the mounted bundle`);
     assert.match(response.headers.get('content-type') ?? '', contentType);
     assert.deepEqual(Buffer.from(await response.arrayBuffer()),
       await readFile(new URL(`../frontend/public${asset}`, import.meta.url)),
       `${asset} must match the original public asset`);
   }
-  console.log('PASS: both theme logos and the local font are served intact from the Docker image');
+  console.log('PASS: both theme logos and the local font are served intact from the mounted bundle');
   assert.equal((await request(`${frontend}/workspace`)).status, 200, 'SPA routes must serve index.html');
   for (const path of ['/.env', '/assets/missing.js', '/api/unknown']) {
     assert.equal((await request(`${frontend}${path}`)).status, 404, `${path} must not fall back to the SPA`);
   }
-  console.log('PASS: Node 24, PostgreSQL 17, migrations, React assets, same-origin API and health checks');
+  console.log('PASS: Nginx, Node 24, PostgreSQL 17, migrations, React assets, same-origin API and health checks');
+
+  const proxyId = (await compose('ps', '-q', 'proxy')).stdout.trim();
+  const [proxyContainer] = JSON.parse((await docker('inspect', proxyId)).stdout);
+  const bundleMount = proxyContainer.Mounts.find(mount => mount.Destination === '/usr/share/nginx/html');
+  assert.equal(bundleMount.Type, 'bind');
+  assert.equal(bundleMount.RW, false, 'Nginx must only read the host bundle');
+  const bundleMarker = join(bundleDirectory, 'bundle-smoke.txt');
+  await writeFile(bundleMarker, 'first bundle', 'utf8');
+  assert.equal(await (await request(`${frontend}/bundle-smoke.txt`)).text(), 'first bundle');
+  await writeFile(bundleMarker, 'updated bundle', 'utf8');
+  assert.equal(await (await request(`${frontend}/bundle-smoke.txt`)).text(), 'updated bundle');
+  await buildFrontend();
+  assert.equal((await request(`${frontend}/bundle-smoke.txt`)).status, 404, 'Rebuild must clear obsolete bundle files');
+  assert.equal(await (await request(frontend)).text(), html);
+  assert.equal((await compose('ps', '-q', 'proxy')).stdout.trim(), proxyId, 'Rebuilding the host bundle must not recreate Nginx');
+  console.log('PASS: read-only host bundle updates and a React rebuild are visible without restarting Nginx');
+
+  await compose('up', '-d', '--no-deps', '--force-recreate', '--wait', '--wait-timeout', '120', 'backend');
+  await waitForHealth(frontend);
+  backend = await serviceUrl('backend', 3000);
+  assert.equal((await compose('ps', '-q', 'proxy')).stdout.trim(), proxyId);
+  console.log('PASS: Nginx reconnects after backend-only recreation without restarting the proxy');
 
   const marker = randomUUID();
   const filename = `smoke-${marker}.txt`;
@@ -299,8 +351,9 @@ try {
   assert.equal(await sql("SELECT name FROM workify.categories WHERE slug='smoke-persistence'"), marker);
   assert.equal(await backendNode(`import { readFile } from 'node:fs/promises'; console.log(await readFile(process.env.UPLOAD_DIR + '/${filename}', 'utf8'));`), marker);
   assert.equal(await sql('SELECT jsonb_agg(to_jsonb(m) ORDER BY version) FROM workify.schema_migrations m'), ledgerBefore);
-  frontend = await serviceUrl('frontend', 8080);
+  frontend = await serviceUrl('proxy', 8080);
   backend = await serviceUrl('backend', 3000);
+  await waitForHealth(frontend);
   await expectHealth(frontend, 200, 'up');
   const restored = await request(`${frontend}/api/auth/refresh`, { method: 'POST', headers: { ...authHeaders, Cookie: refreshCookie } });
   assert.equal(restored.status, 200, 'The session and JWT signing key must survive backend recreation');
@@ -388,5 +441,13 @@ try {
       console.error(`Test cleanup failed for ${project}: ${error.stderr || error.message}`);
       process.exitCode = 1;
     }
+  }
+  try {
+    assert.equal(dirname(testDirectory), resolve(root, 'runtime'));
+    assert.equal(basename(testDirectory), project);
+    await rm(testDirectory, { recursive: true, force: true });
+  } catch (error) {
+    console.error(`Test bundle cleanup failed: ${error.message}`);
+    process.exitCode = 1;
   }
 }

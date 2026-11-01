@@ -10,12 +10,10 @@
     "test": "node --test test/*.test.js",
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "start": "node server.mjs",
+    "build:watch": "vite build --watch",
     "test:browser": "npm run build && playwright test"
   },
   "dependencies": {
-    "express": "5.3.0",
-    "http-proxy-middleware": "4.2.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },

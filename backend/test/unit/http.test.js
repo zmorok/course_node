@@ -31,6 +31,23 @@ test('404 is JSON and the server generates its own request ID', async context =>
   assert.equal(first.response.headers.get('x-powered-by'), null);
 });
 
+test('forwarded client and HTTPS metadata require an explicit single proxy hop', async context => {
+  const router = Router();
+  router.get('/network', (request, response) => response.json({
+    ip: request.ip, protocol: request.protocol, hostname: request.hostname,
+  }));
+  const direct = await startApp(context, router);
+  const proxied = await startApp(context, router, { trustProxyHops: 1 });
+  const headers = {
+    'X-Forwarded-For': '198.51.100.5, 203.0.113.7',
+    'X-Forwarded-Host': 'workify.test', 'X-Forwarded-Proto': 'https',
+  };
+  assert.deepEqual((await direct.request('/api/network', { headers })).body,
+    { ip: '127.0.0.1', protocol: 'http', hostname: '127.0.0.1' });
+  assert.deepEqual((await proxied.request('/api/network', { headers })).body,
+    { ip: '203.0.113.7', protocol: 'https', hostname: 'workify.test' });
+});
+
 test('async handler catches synchronous asynchronous and non-Error failures safely', async context => {
   const router = Router();
   router.get('/sync', asyncHandler(() => { throw new Error('secret-sync'); }));

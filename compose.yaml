@@ -56,6 +56,7 @@ services:
       AUTH_ACCESS_TTL_SECONDS: "${AUTH_ACCESS_TTL_SECONDS:-900}"
       AUTH_SESSION_TTL_DAYS: "${AUTH_SESSION_TTL_DAYS:-30}"
       HTTP_JSON_LIMIT_BYTES: "${HTTP_JSON_LIMIT_BYTES:-65536}"
+      HTTP_TRUST_PROXY_HOPS: "1"
       PGPOOL_MAX: "${PGPOOL_MAX:-5}"
       PG_CONNECTION_TIMEOUT_MS: "${PG_CONNECTION_TIMEOUT_MS:-2000}"
       PG_IDLE_TIMEOUT_MS: "${PG_IDLE_TIMEOUT_MS:-10000}"
@@ -79,26 +80,23 @@ services:
     init: true
     restart: unless-stopped
 
-  frontend:
-    container_name: ${CONTAINER_NAME_PREFIX:-}frontend
-    build:
-      context: ./frontend
-    environment:
-      NODE_ENV: production
-      PORT: "8080"
-      BACKEND_URL: http://backend:3000
+  proxy:
+    container_name: ${CONTAINER_NAME_PREFIX:-}proxy
+    image: nginx:alpine
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-5173}:8080"
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${WORKIFY_BUNDLE_DIR:-./proxy/bundle}:/usr/share/nginx/html:ro
     depends_on:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD-SHELL", "test -s /usr/share/nginx/html/index.html && wget -q -O /dev/null http://127.0.0.1:8080/healthz"]
       interval: 5s
       timeout: 4s
       retries: 6
       start_period: 10s
-    init: true
     restart: unless-stopped
 
 volumes:

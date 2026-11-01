@@ -38,6 +38,7 @@ export function loadConfig(source = process.env) {
     port: integer('PORT', 3000, 1, 65535),
     uploadDir,
     jsonLimitBytes: integer('HTTP_JSON_LIMIT_BYTES', 65536, 1024, 1048576),
+    trustProxyHops: integer('HTTP_TRUST_PROXY_HOPS', 0, 0, 1),
     auth: Object.freeze({ secret, cookieSecure: cookieSecure === 'true',
       accessTtlSeconds: integer('AUTH_ACCESS_TTL_SECONDS', 900, 60, 3600),
       sessionTtlDays: integer('AUTH_SESSION_TTL_DAYS', 30, 1, 90) }),

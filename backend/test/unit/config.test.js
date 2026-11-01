@@ -16,6 +16,8 @@ test('configuration preserves Docker defaults, secret whitespace and immutable o
   assert.equal(config.database.password, '  significant spaces  ');
   assert.equal(config.database.max, 5);
   assert.equal(config.jsonLimitBytes, 65536);
+  assert.equal(config.trustProxyHops, 0);
+  assert.equal(loadConfig({ ...valid, HTTP_TRUST_PROXY_HOPS: '1' }).trustProxyHops, 1);
   assert(Object.isFrozen(config));
   assert(Object.isFrozen(config.database));
 });
@@ -25,6 +27,7 @@ test('invalid settings fail with field names and no configuration values', async
     ['PORT', '0'], ['PORT', '3000junk'], ['PORT', '65536'], ['PORT', '2e3'],
     ['PGPORT', '-1'], ['PGPOOL_MAX', '0'], ['PGPOOL_MAX', '51'],
     ['PG_CONNECTION_TIMEOUT_MS', '0'], ['HTTP_JSON_LIMIT_BYTES', '1048577'],
+    ['HTTP_TRUST_PROXY_HOPS', '-1'], ['HTTP_TRUST_PROXY_HOPS', '2'],
     ['PGHOST', ''], ['PGUSER', ' '], ['PGDATABASE', ''], ['PGPASSWORD', ''],
     ['NODE_ENV', 'unknown'], ['UPLOAD_DIR', 'relative/uploads'],
     ['AUTH_JWT_SECRET', 'short'], ['AUTH_JWT_SECRET', '0'.repeat(64)],
