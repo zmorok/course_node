@@ -1,23 +1,124 @@
-import {Router} from 'express';
-import {rateLimit} from 'express-rate-limit';
-import {AppError} from '../utils/app-error.js';
-import {authMiddleware,roleMiddleware} from '../middleware/auth.js';
-import {validate} from '../middleware/validate.js';
-import {asyncHandler} from '../utils/async-handler.js';
-import {orderQuery,orderParams,orderDetailQuery} from '../validators/orders.js';
-import {createOrderController} from '../controllers/order.controller.js';
-import {createOrderWorkController} from '../controllers/order-work.controller.js';
-import {submissionCreate,submissionRevision,submissionAccept,deadlineCreate,deadlineReject,deadlineApprove,submissionParams,deadlineParams,workQuery,orderCancel} from '../validators/order-work.js';
-export function createOrderRouter(service,authService,workService){
-  const router=Router(),controller=createOrderController(service),auth=[authMiddleware(authService),roleMiddleware('CLIENT')];
-  router.get('/me/orders',...auth,validate(orderQuery,'query'),asyncHandler(controller.own));
-  router.get('/orders/:orderId',...auth,validate(orderParams,'params'),validate(orderDetailQuery,'query'),asyncHandler(controller.get));
-  if(workService){
-    const work=createOrderWorkController(workService),writes=rateLimit({windowMs:15*60*1000,limit:60,standardHeaders:'draft-8',legacyHeaders:false,handler:(_req,_res,next)=>next(new AppError(429,'RATE_LIMITED','Слишком много действий с заказами. Повторите позже'))});
-    for(const [suffix,handler] of [['submissions',work.submissions],['deadline-requests',work.deadlines],['events',work.events]])router.get(`/orders/:orderId/${suffix}`,...auth,validate(orderParams,'params'),validate(workQuery,'query'),asyncHandler(handler));
-    router.post('/orders/:orderId/cancel',...auth,writes,validate(orderParams,'params'),validate(orderDetailQuery,'query'),validate(orderCancel),asyncHandler(work.cancel));
-    const routes=[['submissions',orderParams,submissionCreate,work.submit],['submissions/:submissionId/revision',submissionParams,submissionRevision,work.revision],['submissions/:submissionId/accept',submissionParams,submissionAccept,work.accept],['deadline-requests',orderParams,deadlineCreate,work.requestDeadline],['deadline-requests/:requestId/approve',deadlineParams,deadlineApprove,work.approve],['deadline-requests/:requestId/reject',deadlineParams,deadlineReject,work.reject]];
-    for(const [suffix,params,body,handler] of routes)router.post(`/orders/:orderId/${suffix}`,...auth,writes,validate(params,'params'),validate(orderDetailQuery,'query'),validate(body),asyncHandler(handler));
+import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
+import { AppError } from '../utils/app-error.js';
+import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { asyncHandler } from '../utils/async-handler.js';
+import { orderQuery, orderParams, orderDetailQuery } from '../validators/orders.js';
+import { createOrderController } from '../controllers/order.controller.js';
+import { createOrderWorkController } from '../controllers/order-work.controller.js';
+import {
+  submissionCreate,
+  submissionRevision,
+  submissionAccept,
+  deadlineCreate,
+  deadlineReject,
+  deadlineApprove,
+  submissionParams,
+  deadlineParams,
+  workQuery,
+  orderCancel,
+} from '../validators/order-work.js';
+
+export function createOrderRouter(service, authService, workService) {
+  const router = Router();
+  const controller = createOrderController(service);
+  const clientMiddleware = [authMiddleware(authService), roleMiddleware('CLIENT')];
+
+  router.get(
+    '/me/orders',
+    ...clientMiddleware,
+    validate(orderQuery, 'query'),
+    asyncHandler(controller.own),
+  );
+
+  router.get(
+    '/orders/:orderId',
+    ...clientMiddleware,
+    validate(orderParams, 'params'),
+    validate(orderDetailQuery, 'query'),
+    asyncHandler(controller.get),
+  );
+
+  if (workService) {
+    const workController = createOrderWorkController(workService);
+
+    const writeRateLimit = rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 60,
+      standardHeaders: 'draft-8',
+      legacyHeaders: false,
+      handler: (_request, _response, next) =>
+        next(
+          new AppError(429, 'RATE_LIMITED', 'Слишком много действий с заказами. Повторите позже'),
+        ),
+    });
+
+    for (const [suffix, handler] of [
+      ['submissions', workController.submissions],
+      ['deadline-requests', workController.deadlines],
+      ['events', workController.events],
+    ]) {
+      router.get(
+        `/orders/:orderId/${suffix}`,
+        ...clientMiddleware,
+        validate(orderParams, 'params'),
+        validate(workQuery, 'query'),
+        asyncHandler(handler),
+      );
+    }
+
+    router.post(
+      '/orders/:orderId/cancel',
+      ...clientMiddleware,
+      writeRateLimit,
+      validate(orderParams, 'params'),
+      validate(orderDetailQuery, 'query'),
+      validate(orderCancel),
+      asyncHandler(workController.cancel),
+    );
+
+    const commandRoutes = [
+      ['submissions', orderParams, submissionCreate, workController.submit],
+      [
+        'submissions/:submissionId/revision',
+        submissionParams,
+        submissionRevision,
+        workController.revision,
+      ],
+      [
+        'submissions/:submissionId/accept',
+        submissionParams,
+        submissionAccept,
+        workController.accept,
+      ],
+      ['deadline-requests', orderParams, deadlineCreate, workController.requestDeadline],
+      [
+        'deadline-requests/:requestId/approve',
+        deadlineParams,
+        deadlineApprove,
+        workController.approve,
+      ],
+      [
+        'deadline-requests/:requestId/reject',
+        deadlineParams,
+        deadlineReject,
+        workController.reject,
+      ],
+    ];
+
+    for (const [suffix, parseParams, parseBody, handler] of commandRoutes) {
+      router.post(
+        `/orders/:orderId/${suffix}`,
+        ...clientMiddleware,
+        writeRateLimit,
+        validate(parseParams, 'params'),
+        validate(orderDetailQuery, 'query'),
+        validate(parseBody),
+        asyncHandler(handler),
+      );
+    }
   }
+
   return router;
 }

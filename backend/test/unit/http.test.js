@@ -21,43 +21,82 @@ function assertProblem(result, status, code) {
   assert.equal(result.body.requestId, result.response.headers.get('x-request-id'));
 }
 
-test('404 is JSON and the server generates its own request ID', async context => {
+test('404 is JSON and the server generates its own request ID', async (context) => {
   const app = await startApp(context, Router());
-  const first = await app.request('/api/missing', { headers: { 'X-Request-Id': 'untrusted-client-id' } });
+  const first = await app.request('/api/missing', {
+    headers: { 'X-Request-Id': 'untrusted-client-id' },
+  });
+
   assertProblem(first, 404, 'NOT_FOUND');
+
   const second = await app.request('/outside-api');
+
   assertProblem(second, 404, 'NOT_FOUND');
   assert.notEqual(first.body.requestId, second.body.requestId);
   assert.equal(first.response.headers.get('x-powered-by'), null);
 });
-
-test('forwarded client and HTTPS metadata require an explicit single proxy hop', async context => {
+test('forwarded client and HTTPS metadata require an explicit single proxy hop', async (context) => {
   const router = Router();
-  router.get('/network', (request, response) => response.json({
-    ip: request.ip, protocol: request.protocol, hostname: request.hostname,
-  }));
+
+  router.get('/network', (request, response) =>
+    response.json({ ip: request.ip, protocol: request.protocol, hostname: request.hostname }),
+  );
+
   const direct = await startApp(context, router);
   const proxied = await startApp(context, router, { trustProxyHops: 1 });
+
   const headers = {
     'X-Forwarded-For': '198.51.100.5, 203.0.113.7',
-    'X-Forwarded-Host': 'workify.test', 'X-Forwarded-Proto': 'https',
+    'X-Forwarded-Host': 'workify.test',
+    'X-Forwarded-Proto': 'https',
   };
-  assert.deepEqual((await direct.request('/api/network', { headers })).body,
-    { ip: '127.0.0.1', protocol: 'http', hostname: '127.0.0.1' });
-  assert.deepEqual((await proxied.request('/api/network', { headers })).body,
-    { ip: '203.0.113.7', protocol: 'https', hostname: 'workify.test' });
-});
 
-test('async handler catches synchronous asynchronous and non-Error failures safely', async context => {
+  assert.deepEqual((await direct.request('/api/network', { headers })).body, {
+    ip: '127.0.0.1',
+    protocol: 'http',
+    hostname: '127.0.0.1',
+  });
+  assert.deepEqual((await proxied.request('/api/network', { headers })).body, {
+    ip: '203.0.113.7',
+    protocol: 'https',
+    hostname: 'workify.test',
+  });
+});
+test('async handler catches synchronous asynchronous and non-Error failures safely', async (context) => {
   const router = Router();
-  router.get('/sync', asyncHandler(() => { throw new Error('secret-sync'); }));
-  router.get('/async', asyncHandler(async () => { throw new Error('secret-async'); }));
-  router.get('/non-error', asyncHandler(() => Promise.reject('route')));
-  router.get('/false', asyncHandler(() => Promise.reject(false)));
-  router.get('/operational', asyncHandler(() => { throw new AppError(403, 'FORBIDDEN', 'Доступ запрещён'); }));
+
+  router.get(
+    '/sync',
+    asyncHandler(() => {
+      throw new Error('secret-sync');
+    }),
+  );
+  router.get(
+    '/async',
+    asyncHandler(async () => {
+      throw new Error('secret-async');
+    }),
+  );
+  router.get(
+    '/non-error',
+    asyncHandler(() => Promise.reject('route')),
+  );
+  router.get(
+    '/false',
+    asyncHandler(() => Promise.reject(false)),
+  );
+  router.get(
+    '/operational',
+    asyncHandler(() => {
+      throw new AppError(403, 'FORBIDDEN', 'Доступ запрещён');
+    }),
+  );
+
   const app = await startApp(context, router);
+
   for (const path of ['sync', 'async', 'non-error', 'false']) {
     const result = await app.request(`/api/${path}?token=secret-query`);
+
     assertProblem(result, 500, 'INTERNAL_ERROR');
     assert(!JSON.stringify(result.body).includes('secret'));
   }
@@ -65,77 +104,142 @@ test('async handler catches synchronous asynchronous and non-Error failures safe
   assert.equal(app.logs.length, 4);
   assert(!app.logs.join('').includes('secret'));
 });
-
-test('parser failures and body size limits use the common envelope', async context => {
+test('parser failures and body size limits use the common envelope', async (context) => {
   const router = Router();
+
   router.post('/echo', (request, response) => response.json(request.body));
+
   const app = await startApp(context, router, { jsonLimitBytes: 1024 });
-  const post = (body, contentType = 'application/json') => app.request('/api/echo', { method: 'POST', headers: { 'Content-Type': contentType }, body });
+  const post = (body, contentType = 'application/json') =>
+    app.request('/api/echo', { method: 'POST', headers: { 'Content-Type': contentType }, body });
   const malformed = await post('{"password":"secret-body",');
+
   assertProblem(malformed, 400, 'INVALID_JSON');
   assert(!JSON.stringify(malformed.body).includes('secret-body'));
   assertProblem(await post(JSON.stringify({ text: 'x'.repeat(2000) })), 413, 'PAYLOAD_TOO_LARGE');
-  assertProblem(await post('{}', 'application/json; charset=invalid-charset'), 415, 'UNSUPPORTED_ENCODING');
-  assert.equal((await post('{"accepted":true}', 'application/vnd.workify+json')).body.accepted, true);
+  assertProblem(
+    await post('{}', 'application/json; charset=invalid-charset'),
+    415,
+    'UNSUPPORTED_ENCODING',
+  );
+  assert.equal(
+    (await post('{"accepted":true}', 'application/vnd.workify+json')).body.accepted,
+    true,
+  );
 });
-
-test('validation middleware validates body and read-only Express query separately', async context => {
+test('validation middleware validates body and read-only Express query separately', async (context) => {
   const router = Router();
   let handled = 0;
+
   router.post('/validate', validate(object({ title: text({ max: 30 }) })), (request, response) => {
     handled++;
     response.json(request.validated.body);
   });
-  router.get('/query', validate(object({ page: integer({ min: 1, max: 100, coerce: true }) }, { field: 'query' }), 'query'), (request, response) => response.json(request.validated.query));
+  router.get(
+    '/query',
+    validate(
+      object({ page: integer({ min: 1, max: 100, coerce: true }) }, { field: 'query' }),
+      'query',
+    ),
+    (request, response) => response.json(request.validated.query),
+  );
   router.get('/items/:id', (_request, response) => response.json({ ok: true }));
+
   const app = await startApp(context, router);
-  const invalid = await app.request('/api/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"title":"ok","role":"ADMIN"}' });
+
+  const invalid = await app.request('/api/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{"title":"ok","role":"ADMIN"}',
+  });
+
   assertProblem(invalid, 422, 'VALIDATION_ERROR');
   assert.equal(handled, 0);
-  const valid = await app.request('/api/validate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"title":"  Задача  "}' });
+
+  const valid = await app.request('/api/validate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{"title":"  Задача  "}',
+  });
+
   assert.deepEqual(valid.body, { title: 'Задача' });
   assert.equal(handled, 1);
   assert.deepEqual((await app.request('/api/query?page=2')).body, { page: 2 });
   assertProblem(await app.request('/api/query?page=2&page=3'), 422, 'VALIDATION_ERROR');
   assertProblem(await app.request('/api/items/%E0%A4%A'), 400, 'INVALID_REQUEST');
 });
-
-test('database errors map to safe API errors without SQL or constraint details', async context => {
+test('database errors map to safe API errors without SQL or constraint details', async (context) => {
   const router = Router();
-  router.get('/database/:code', asyncHandler(request => {
-    throw Object.assign(new Error('private SQL and password'), { code: request.params.code, detail: 'private email', constraint: 'private_constraint' });
-  }));
+
+  router.get(
+    '/database/:code',
+    asyncHandler((request) => {
+      throw Object.assign(new Error('private SQL and password'), {
+        code: request.params.code,
+        detail: 'private email',
+        constraint: 'private_constraint',
+      });
+    }),
+  );
+
   const app = await startApp(context, router);
+
   for (const [code, status, publicCode] of [
-    ['23505', 409, 'CONFLICT'], ['23503', 409, 'CONFLICT'], ['40001', 409, 'CONFLICT'], ['40P01', 409, 'CONFLICT'],
-    ['23514', 422, 'VALIDATION_ERROR'], ['22P02', 422, 'VALIDATION_ERROR'],
-    ['ECONNREFUSED', 503, 'SERVICE_UNAVAILABLE'], ['08006', 503, 'SERVICE_UNAVAILABLE'], ['57P01', 503, 'SERVICE_UNAVAILABLE'],
+    ['23505', 409, 'CONFLICT'],
+    ['23503', 409, 'CONFLICT'],
+    ['40001', 409, 'CONFLICT'],
+    ['40P01', 409, 'CONFLICT'],
+    ['23514', 422, 'VALIDATION_ERROR'],
+    ['22P02', 422, 'VALIDATION_ERROR'],
+    ['ECONNREFUSED', 503, 'SERVICE_UNAVAILABLE'],
+    ['08006', 503, 'SERVICE_UNAVAILABLE'],
+    ['57P01', 503, 'SERVICE_UNAVAILABLE'],
     ['unexpected', 500, 'INTERNAL_ERROR'],
   ]) {
     const result = await app.request(`/api/database/${code}`);
+
     assertProblem(result, status, publicCode);
     assert(!JSON.stringify(result.body).includes('private'));
   }
 });
-
-test('existing readiness contract reports independent database and uploads checks', async context => {
+test('existing readiness contract reports independent database and uploads checks', async (context) => {
   let connected = true;
   let storageAvailable = true;
+
   const healthService = createHealthService({
-    healthRepository: { ping: async () => connected }, uploadDir: '/unused',
-    checkStorage: async () => { if (!storageAvailable) throw new Error('private storage path'); },
+    healthRepository: { ping: async () => connected },
+    uploadDir: '/unused',
+    checkStorage: async () => {
+      if (!storageAvailable) {
+        throw new Error('private storage path');
+      }
+    },
   });
+
   const app = await startApp(context, createApiRouter({ healthService }));
-  assert.deepEqual((await app.request('/api/health')).body, { status: 'ok', checks: { database: 'up', uploads: 'up' } });
+
+  assert.deepEqual((await app.request('/api/health')).body, {
+    status: 'ok',
+    checks: { database: 'up', uploads: 'up' },
+  });
   connected = false;
   assert.equal((await app.request('/api/health')).response.status, 503);
   storageAvailable = false;
-  assert.deepEqual((await app.request('/api/health')).body, { status: 'error', checks: { database: 'down', uploads: 'down' } });
+  assert.deepEqual((await app.request('/api/health')).body, {
+    status: 'error',
+    checks: { database: 'down', uploads: 'down' },
+  });
 });
-
 test('error middleware delegates an error after response headers have been sent', () => {
   const error = new Error('failure after streaming started');
   let forwarded;
-  createErrorHandler({ error() { assert.fail('Must not write another response'); } })(error, {}, { headersSent: true }, value => { forwarded = value; });
+
+  createErrorHandler({
+    error() {
+      assert.fail('Must not write another response');
+    },
+  })(error, {}, { headersSent: true }, (value) => {
+    forwarded = value;
+  });
   assert.equal(forwarded, error);
 });

@@ -11,37 +11,66 @@ export class ConfigurationError extends Error {
 
 export function loadConfig(source = process.env) {
   const invalid = [];
+
   function text(key, fallback, { secret = false } = {}) {
     const raw = source[key] ?? fallback;
+
     if (typeof raw !== 'string' || !raw.trim() || /[\r\n\0]/.test(raw)) {
       invalid.push(key);
+
       return '';
     }
+
     return secret ? raw : raw.trim();
   }
+
   function integer(key, fallback, min, max) {
     const raw = source[key] ?? String(fallback);
     const value = /^\d+$/.test(raw) ? Number(raw) : NaN;
-    if (!Number.isSafeInteger(value) || value < min || value > max) invalid.push(key);
+
+    if (!Number.isSafeInteger(value) || value < min || value > max) {
+      invalid.push(key);
+    }
+
     return value;
   }
+
   const secret = text('AUTH_JWT_SECRET', undefined, { secret: true });
-  if (!/^[a-f0-9]{64}$/i.test(secret) || /^(.)\1+$/.test(secret)) invalid.push('AUTH_JWT_SECRET');
+
+  if (!/^[a-f0-9]{64}$/i.test(secret) || /^(.)\1+$/.test(secret)) {
+    invalid.push('AUTH_JWT_SECRET');
+  }
+
   const cookieSecure = text('AUTH_COOKIE_SECURE', 'false');
-  if (!['true', 'false'].includes(cookieSecure)) invalid.push('AUTH_COOKIE_SECURE');
+
+  if (!['true', 'false'].includes(cookieSecure)) {
+    invalid.push('AUTH_COOKIE_SECURE');
+  }
+
   const nodeEnv = text('NODE_ENV', 'development');
-  if (!['development', 'test', 'production'].includes(nodeEnv)) invalid.push('NODE_ENV');
+
+  if (!['development', 'test', 'production'].includes(nodeEnv)) {
+    invalid.push('NODE_ENV');
+  }
+
   const uploadDir = text('UPLOAD_DIR', fileURLToPath(new URL('../../uploads/', import.meta.url)));
-  if (!isAbsolute(uploadDir)) invalid.push('UPLOAD_DIR');
+
+  if (!isAbsolute(uploadDir)) {
+    invalid.push('UPLOAD_DIR');
+  }
+
   const config = {
     nodeEnv,
     port: integer('PORT', 3000, 1, 65535),
     uploadDir,
     jsonLimitBytes: integer('HTTP_JSON_LIMIT_BYTES', 65536, 1024, 1048576),
     trustProxyHops: integer('HTTP_TRUST_PROXY_HOPS', 0, 0, 1),
-    auth: Object.freeze({ secret, cookieSecure: cookieSecure === 'true',
+    auth: Object.freeze({
+      secret,
+      cookieSecure: cookieSecure === 'true',
       accessTtlSeconds: integer('AUTH_ACCESS_TTL_SECONDS', 900, 60, 3600),
-      sessionTtlDays: integer('AUTH_SESSION_TTL_DAYS', 30, 1, 90) }),
+      sessionTtlDays: integer('AUTH_SESSION_TTL_DAYS', 30, 1, 90),
+    }),
     database: Object.freeze({
       host: text('PGHOST', 'postgres'),
       port: integer('PGPORT', 5432, 1, 65535),
@@ -55,6 +84,10 @@ export function loadConfig(source = process.env) {
       statement_timeout: integer('PG_STATEMENT_TIMEOUT_MS', 2000, 100, 60000),
     }),
   };
-  if (invalid.length) throw new ConfigurationError([...new Set(invalid)]);
+
+  if (invalid.length) {
+    throw new ConfigurationError([...new Set(invalid)]);
+  }
+
   return Object.freeze(config);
 }

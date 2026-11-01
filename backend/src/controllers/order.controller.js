@@ -1,4 +1,13 @@
-export function createOrderController(service){return {
-  own:async(req,res)=>res.set('Cache-Control','no-store').json(await service.list(req.user,req.validated.query)),
-  get:async(req,res)=>res.set('Cache-Control','no-store').json({order:await service.get(req.user,req.validated.params.orderId)}),
-};}
+export function createOrderController(service) {
+  return {
+    own: async (request, response) =>
+      response
+        .set('Cache-Control', 'no-store')
+        .json(await service.list(request.user, request.validated.query)),
+
+    get: async (request, response) =>
+      response
+        .set('Cache-Control', 'no-store')
+        .json({ order: await service.get(request.user, request.validated.params.orderId) }),
+  };
+}

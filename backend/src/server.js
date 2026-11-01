@@ -1,5 +1,5 @@
-import {createNotificationRepository} from './repositories/notification.repository.js';
-import {createNotificationService} from './services/notification.service.js';
+import { createNotificationRepository } from './repositories/notification.repository.js';
+import { createNotificationService } from './services/notification.service.js';
 import { mkdir } from 'node:fs/promises';
 import { createApp } from './app.js';
 import { ConfigurationError, loadConfig } from './config/env.js';
@@ -24,72 +24,206 @@ import { createProposalRepository } from './repositories/proposal.repository.js'
 import { createAssignmentRepository } from './repositories/assignment.repository.js';
 import { createProposalService } from './services/proposal.service.js';
 import { createAssignmentService } from './services/assignment.service.js';
-import {createFreelancerRepository} from './repositories/freelancer.repository.js';
-import {createFreelancerService} from './services/freelancer.service.js';
-import {createInvitationRepository} from './repositories/invitation.repository.js';
-import {createInvitationService} from './services/invitation.service.js';
-import {createOrderRepository} from './repositories/order.repository.js';
-import {createOrderService} from './services/order.service.js';
-import {createOrderWorkRepository} from './repositories/order-work.repository.js';
-import {createOrderWorkService} from './services/order-work.service.js';
-import {createReviewRepository} from './repositories/review.repository.js';
-import {createReviewService} from './services/review.service.js';
-import {createComplaintRepository} from './repositories/complaint.repository.js';
-import {createComplaintService} from './services/complaint.service.js';
-import {createWarningRepository} from './repositories/warning.repository.js';
-import {createWarningService} from './services/warning.service.js';
-import {createAdminRepository} from './repositories/admin.repository.js';
-import {createAdminService} from './services/admin.service.js';
-import {createAuditRepository} from './repositories/audit.repository.js';
-import {createAuditService} from './services/audit.service.js';
+import { createFreelancerRepository } from './repositories/freelancer.repository.js';
+import { createFreelancerService } from './services/freelancer.service.js';
+import { createInvitationRepository } from './repositories/invitation.repository.js';
+import { createInvitationService } from './services/invitation.service.js';
+import { createOrderRepository } from './repositories/order.repository.js';
+import { createOrderService } from './services/order.service.js';
+import { createOrderWorkRepository } from './repositories/order-work.repository.js';
+import { createOrderWorkService } from './services/order-work.service.js';
+import { createReviewRepository } from './repositories/review.repository.js';
+import { createReviewService } from './services/review.service.js';
+import { createComplaintRepository } from './repositories/complaint.repository.js';
+import { createComplaintService } from './services/complaint.service.js';
+import { createWarningRepository } from './repositories/warning.repository.js';
+import { createWarningService } from './services/warning.service.js';
+import { createAdminRepository } from './repositories/admin.repository.js';
+import { createAdminService } from './services/admin.service.js';
+import { createAuditRepository } from './repositories/audit.repository.js';
+import { createAuditService } from './services/audit.service.js';
 
 let pool;
+
 try {
   const config = loadConfig();
+
   await mkdir(config.uploadDir, { recursive: true });
   pool = createDatabasePool(config.database);
+
   const healthRepository = createHealthRepository(pool);
   const healthService = createHealthService({ healthRepository, uploadDir: config.uploadDir });
-  const authService = await createAuthService({ repository: createAuthRepository(pool),
-    transaction: operation => withTransaction(pool, client => operation(createAuthRepository(client))),
-    accessTokens: createAccessTokens(config.auth), sessionTtlDays: config.auth.sessionTtlDays });
-  const profileService = createProfileService({ repository: createProfileRepository(pool),
-    transaction: operation => withTransaction(pool, client => operation(createProfileRepository(client))) });
-  const fileService = createFileService({ repository: createFileRepository(pool), storage: createLocalStorage(config.uploadDir),
-    transaction: operation => withTransaction(pool, client => operation(createFileRepository(client))) });
+
+  // Внутри транзакции все её репозитории используют одно соединение с БД.
+  const authService = await createAuthService({
+    repository: createAuthRepository(pool),
+    transaction: (operation) =>
+      withTransaction(pool, (client) => operation(createAuthRepository(client))),
+    accessTokens: createAccessTokens(config.auth),
+    sessionTtlDays: config.auth.sessionTtlDays,
+  });
+
+  const profileService = createProfileService({
+    repository: createProfileRepository(pool),
+    transaction: (operation) =>
+      withTransaction(pool, (client) => operation(createProfileRepository(client))),
+  });
+
+  const fileService = createFileService({
+    repository: createFileRepository(pool),
+    storage: createLocalStorage(config.uploadDir),
+    transaction: (operation) =>
+      withTransaction(pool, (client) => operation(createFileRepository(client))),
+  });
+
   await fileService.drainDeletes();
+
   const cleanupTimer = setInterval(() => fileService.drainDeletes(), 60_000).unref();
-  const portfolioService = createPortfolioService({ repository: createPortfolioRepository(pool), fileService,
-    transaction: operation => withTransaction(pool, client => operation(createPortfolioRepository(client), createFileRepository(client))) });
-  const projectService = createProjectService({repository:createProjectRepository(pool),fileService,
-    transaction:operation=>withTransaction(pool,client=>operation(createProjectRepository(client),createFileRepository(client)))});
-  const proposalService=createProposalService({repository:createProposalRepository(pool),assignmentService:createAssignmentService(),
-    transaction:operation=>withTransaction(pool,client=>operation(createProposalRepository(client),createAssignmentRepository(client)))});
-  const freelancerService=createFreelancerService({repository:createFreelancerRepository(pool)});
-  const invitationService=createInvitationService({repository:createInvitationRepository(pool),assignmentService:createAssignmentService(),
-    transaction:operation=>withTransaction(pool,client=>operation(createInvitationRepository(client),createAssignmentRepository(client),createProposalRepository(client)))});
-  const orderService=createOrderService({repository:createOrderRepository(pool)});
-  const orderWorkService=createOrderWorkService({repository:createOrderWorkRepository(pool),orders:createOrderRepository(pool),fileService,
-    transaction:operation=>withTransaction(pool,client=>operation(createOrderWorkRepository(client),createOrderRepository(client),createFileRepository(client)))});
-  const reviewService=createReviewService({repository:createReviewRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createReviewRepository(client)))});
-  const complaintService=createComplaintService({repository:createComplaintRepository(pool),fileService,transaction:operation=>withTransaction(pool,client=>operation(createComplaintRepository(client),createFileRepository(client)))});
-  const warningService=createWarningService({repository:createWarningRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createWarningRepository(client)))});
-  const adminService=createAdminService({repository:createAdminRepository(pool),transaction:operation=>withTransaction(pool,client=>operation(createAdminRepository(client)))});
-  const notificationService=createNotificationService({repository:createNotificationRepository(pool)});
-  const auditService=createAuditService({repository:createAuditRepository(pool),transaction:op=>withTransaction(pool,client=>op(createAuditRepository(client)))});
-  const apiRouter = createApiRouter({ healthService, authService, authConfig: config.auth, profileService, fileService, portfolioService, projectService, proposalService, freelancerService, invitationService, orderService, orderWorkService, reviewService, complaintService, warningService, adminService, auditService, notificationService });
-  const app = createApp({ apiRouter, jsonLimitBytes: config.jsonLimitBytes, trustProxyHops: config.trustProxyHops });
+
+  const portfolioService = createPortfolioService({
+    repository: createPortfolioRepository(pool),
+    fileService,
+    transaction: (operation) =>
+      withTransaction(pool, (client) =>
+        operation(createPortfolioRepository(client), createFileRepository(client)),
+      ),
+  });
+
+  const projectService = createProjectService({
+    repository: createProjectRepository(pool),
+    fileService,
+    transaction: (operation) =>
+      withTransaction(pool, (client) =>
+        operation(createProjectRepository(client), createFileRepository(client)),
+      ),
+  });
+
+  const proposalService = createProposalService({
+    repository: createProposalRepository(pool),
+    assignmentService: createAssignmentService(),
+    transaction: (operation) =>
+      withTransaction(pool, (client) =>
+        operation(createProposalRepository(client), createAssignmentRepository(client)),
+      ),
+  });
+
+  const freelancerService = createFreelancerService({
+    repository: createFreelancerRepository(pool),
+  });
+
+  const invitationService = createInvitationService({
+    repository: createInvitationRepository(pool),
+    assignmentService: createAssignmentService(),
+    transaction: (operation) =>
+      withTransaction(pool, (client) =>
+        operation(
+          createInvitationRepository(client),
+          createAssignmentRepository(client),
+          createProposalRepository(client),
+        ),
+      ),
+  });
+
+  const orderService = createOrderService({ repository: createOrderRepository(pool) });
+
+  const orderWorkService = createOrderWorkService({
+    repository: createOrderWorkRepository(pool),
+    orders: createOrderRepository(pool),
+    fileService,
+    transaction: (operation) =>
+      withTransaction(pool, (client) =>
+        operation(
+          createOrderWorkRepository(client),
+          createOrderRepository(client),
+          createFileRepository(client),
+        ),
+      ),
+  });
+
+  const reviewService = createReviewService({
+    repository: createReviewRepository(pool),
+    transaction: (operation) =>
+      withTransaction(pool, (client) => operation(createReviewRepository(client))),
+  });
+
+  const complaintService = createComplaintService({
+    repository: createComplaintRepository(pool),
+    fileService,
+    transaction: (operation) =>
+      withTransaction(pool, (client) =>
+        operation(createComplaintRepository(client), createFileRepository(client)),
+      ),
+  });
+
+  const warningService = createWarningService({
+    repository: createWarningRepository(pool),
+    transaction: (operation) =>
+      withTransaction(pool, (client) => operation(createWarningRepository(client))),
+  });
+
+  const adminService = createAdminService({
+    repository: createAdminRepository(pool),
+    transaction: (operation) =>
+      withTransaction(pool, (client) => operation(createAdminRepository(client))),
+  });
+
+  const notificationService = createNotificationService({
+    repository: createNotificationRepository(pool),
+  });
+
+  const auditService = createAuditService({
+    repository: createAuditRepository(pool),
+    transaction: (operation) =>
+      withTransaction(pool, (client) => operation(createAuditRepository(client))),
+  });
+
+  const apiRouter = createApiRouter({
+    healthService,
+    authService,
+    authConfig: config.auth,
+    profileService,
+    fileService,
+    portfolioService,
+    projectService,
+    proposalService,
+    freelancerService,
+    invitationService,
+    orderService,
+    orderWorkService,
+    reviewService,
+    complaintService,
+    warningService,
+    adminService,
+    auditService,
+    notificationService,
+  });
+
+  const app = createApp({
+    apiRouter,
+    jsonLimitBytes: config.jsonLimitBytes,
+    trustProxyHops: config.trustProxyHops,
+  });
+
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(config.port, '0.0.0.0', () => resolve(listener));
+
     listener.once('error', reject);
   });
+
   console.log(`Workify API listening on port ${config.port}`);
+
   let shuttingDown = false;
+
   const shutdown = () => {
-    if (shuttingDown) return;
+    if (shuttingDown) {
+      return;
+    }
+
     shuttingDown = true;
     clearInterval(cleanupTimer);
+
     const timeout = setTimeout(() => process.exit(1), 10000).unref();
+
     server.close(async () => {
       try {
         await pool.end();
@@ -101,14 +235,21 @@ try {
       }
     });
   };
+
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
 } catch (error) {
-  console.error(error instanceof ConfigurationError ? error.message : JSON.stringify({ event: 'startup_failed' }));
+  console.error(
+    error instanceof ConfigurationError
+      ? error.message
+      : JSON.stringify({ event: 'startup_failed' }),
+  );
+
   try {
     await pool?.end();
   } catch {
     console.error(JSON.stringify({ event: 'shutdown_failed' }));
   }
+
   process.exitCode = 1;
 }

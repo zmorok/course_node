@@ -8,6 +8,8 @@
   },
   "scripts": {
     "start": "node src/server.js",
+    "format": "prettier --write src test package.json .prettierrc.json",
+    "format:check": "prettier --check src test package.json .prettierrc.json",
     "test": "node --test test/unit/*.test.js",
     "test:integration": "node --test test/integration/*.test.js"
   },
@@ -20,5 +22,8 @@
     "jose": "6.2.12",
     "multer": "2.5.0",
     "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "prettier": "3.9.10"
   }
 }

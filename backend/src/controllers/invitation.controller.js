@@ -1,12 +1,51 @@
-export function createInvitationController(service){
-  const json=(res,data)=>res.set('Cache-Control','no-store').json(data);
+export function createInvitationController(service) {
+  const json = (response, data) => response.set('Cache-Control', 'no-store').json(data);
+
   return {
-    projects:async(req,res)=>json(res,{projects:await service.availableProjects(req.user,req.validated.params.userId)}),
-    create:async(req,res)=>json(res.status(201),{invitation:await service.create(req.user,req.validated.params.projectId,req.validated.body)}),
-    own:async(req,res)=>json(res,await service.listOwn(req.user,req.validated.query)),
-    project:async(req,res)=>json(res,await service.listProject(req.user,req.validated.params.projectId,req.validated.query)),
-    get:async(req,res)=>json(res,{invitation:await service.get(req.user,req.validated.params.invitationId)}),
-    accept:async(req,res)=>json(res,{invitation:await service.accept(req.user,req.validated.params.invitationId)}),
-    decline:async(req,res)=>json(res,{invitation:await service.decline(req.user,req.validated.params.invitationId,req.validated.body.reason)}),
+    projects: async (request, response) =>
+      json(response, {
+        projects: await service.availableProjects(request.user, request.validated.params.userId),
+      }),
+
+    create: async (request, response) =>
+      json(response.status(201), {
+        invitation: await service.create(
+          request.user,
+          request.validated.params.projectId,
+          request.validated.body,
+        ),
+      }),
+
+    own: async (request, response) =>
+      json(response, await service.listOwn(request.user, request.validated.query)),
+
+    project: async (request, response) =>
+      json(
+        response,
+        await service.listProject(
+          request.user,
+          request.validated.params.projectId,
+          request.validated.query,
+        ),
+      ),
+
+    get: async (request, response) =>
+      json(response, {
+        invitation: await service.get(request.user, request.validated.params.invitationId),
+      }),
+
+    accept: async (request, response) =>
+      json(response, {
+        invitation: await service.accept(request.user, request.validated.params.invitationId),
+      }),
+
+    decline: async (request, response) =>
+      json(response, {
+        invitation: await service.decline(
+          request.user,
+          request.validated.params.invitationId,
+          request.validated.body.reason,
+        ),
+      }),
   };
 }

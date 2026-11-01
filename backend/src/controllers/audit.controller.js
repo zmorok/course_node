@@ -1,1 +1,20 @@
-export const createAuditController=service=>({export:async(req,res)=>res.set('Cache-Control','no-store').attachment('workify-audit.json').json(await service.export(req.user,req.validated.query)),import:async(req,res)=>res.json(await service.import(req.user,req.file.buffer)),imported:async(req,res)=>res.set('Cache-Control','no-store').json(await service.imported(req.user,req.validated.query)),list:async(req,res)=>res.set('Cache-Control','no-store').json(await service.list(req.user,req.validated.query))});
+export const createAuditController = (service) => ({
+  export: async (request, response) =>
+    response
+      .set('Cache-Control', 'no-store')
+      .attachment('workify-audit.json')
+      .json(await service.export(request.user, request.validated.query)),
+
+  import: async (request, response) =>
+    response.json(await service.import(request.user, request.file.buffer)),
+
+  imported: async (request, response) =>
+    response
+      .set('Cache-Control', 'no-store')
+      .json(await service.imported(request.user, request.validated.query)),
+
+  list: async (request, response) =>
+    response
+      .set('Cache-Control', 'no-store')
+      .json(await service.list(request.user, request.validated.query)),
+});

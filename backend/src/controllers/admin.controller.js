@@ -1,16 +1,103 @@
-export function createAdminController(service){const json=(res,data)=>res.set('Cache-Control','no-store').json(data);return {
-  createUser:async(req,res)=>res.status(201).set('Cache-Control','no-store').json(await service.createUser(req.user,req.validated.body)),
-  updateUser:async(req,res)=>json(res,await service.updateUser(req.user,req.validated.params.userId,req.validated.body)),
-  deleteUser:async(req,res)=>json(res,await service.deleteUser(req.user,req.validated.params.userId,req.validated.body)),
-  users:async(req,res)=>json(res,await service.users(req.user,req.validated.query)),
-  user:async(req,res)=>json(res,await service.user(req.user,req.validated.params.userId)),
-  sanctions:async(req,res)=>json(res,await service.sanctions(req.user,req.validated.params.userId,req.validated.query)),
-  block:async(req,res)=>json(res,await service.block(req.user,req.validated.params.userId,req.validated.body)),
-  unblock:async(req,res)=>json(res,await service.unblock(req.user,req.validated.params.userId,req.validated.body)),
-  queue:async(req,res)=>json(res,await service.queue(req.user,req.validated.query)),
-  detail:async(req,res)=>json(res,await service.detail(req.user,req.validated.params.complaintId)),
-  context:async(req,res)=>json(res,await service.context(req.user,req.validated.params.complaintId,req.validated.params.section,req.validated.query)),
-  claim:async(req,res)=>json(res,await service.claim(req.user,req.validated.params.complaintId)),
-  reject:async(req,res)=>json(res,await service.reject(req.user,req.validated.params.complaintId,req.validated.body)),
-  resolve:async(req,res)=>json(res,await service.resolve(req.user,req.validated.params.complaintId,req.validated.body)),
-};}
+export function createAdminController(service) {
+  const json = (response, data) => response.set('Cache-Control', 'no-store').json(data);
+
+  return {
+    createUser: async (request, response) =>
+      response
+        .status(201)
+        .set('Cache-Control', 'no-store')
+        .json(await service.createUser(request.user, request.validated.body)),
+
+    updateUser: async (request, response) =>
+      json(
+        response,
+        await service.updateUser(
+          request.user,
+          request.validated.params.userId,
+          request.validated.body,
+        ),
+      ),
+
+    deleteUser: async (request, response) =>
+      json(
+        response,
+        await service.deleteUser(
+          request.user,
+          request.validated.params.userId,
+          request.validated.body,
+        ),
+      ),
+
+    users: async (request, response) =>
+      json(response, await service.users(request.user, request.validated.query)),
+
+    user: async (request, response) =>
+      json(response, await service.user(request.user, request.validated.params.userId)),
+
+    sanctions: async (request, response) =>
+      json(
+        response,
+        await service.sanctions(
+          request.user,
+          request.validated.params.userId,
+          request.validated.query,
+        ),
+      ),
+
+    block: async (request, response) =>
+      json(
+        response,
+        await service.block(request.user, request.validated.params.userId, request.validated.body),
+      ),
+
+    unblock: async (request, response) =>
+      json(
+        response,
+        await service.unblock(
+          request.user,
+          request.validated.params.userId,
+          request.validated.body,
+        ),
+      ),
+
+    queue: async (request, response) =>
+      json(response, await service.queue(request.user, request.validated.query)),
+
+    detail: async (request, response) =>
+      json(response, await service.detail(request.user, request.validated.params.complaintId)),
+
+    context: async (request, response) =>
+      json(
+        response,
+        await service.context(
+          request.user,
+          request.validated.params.complaintId,
+          request.validated.params.section,
+          request.validated.query,
+        ),
+      ),
+
+    claim: async (request, response) =>
+      json(response, await service.claim(request.user, request.validated.params.complaintId)),
+
+    reject: async (request, response) =>
+      json(
+        response,
+        await service.reject(
+          request.user,
+          request.validated.params.complaintId,
+          request.validated.body,
+        ),
+      ),
+
+    resolve: async (request, response) =>
+      json(
+        response,
+        await service.resolve(
+          request.user,
+          request.validated.params.complaintId,
+          request.validated.body,
+        ),
+      ),
+  };
+}

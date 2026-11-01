@@ -1,8 +1,46 @@
-export function createComplaintController(service){return {
-  update:async(req,res)=>res.set('Cache-Control','no-store').json(await service.update(req.user,req.validated.params.complaintId,req.validated.body)),
-  remove:async(req,res)=>res.set('Cache-Control','no-store').json(await service.remove(req.user,req.validated.params.complaintId)),
-  create:async(req,res)=>res.status(201).set('Cache-Control','no-store').json({complaint:await service.create(req.user,req.validated.params.orderId,req.validated.body)}),
-  order:async(req,res)=>res.set('Cache-Control','no-store').json(await service.order(req.user,req.validated.params.orderId)),
-  list:async(req,res)=>res.set('Cache-Control','no-store').json(await service.list(req.user,req.validated.query)),
-  own:async(req,res)=>res.set('Cache-Control','no-store').json({complaint:await service.own(req.user,req.validated.params.complaintId)}),
-};}
+export function createComplaintController(service) {
+  return {
+    update: async (request, response) =>
+      response
+        .set('Cache-Control', 'no-store')
+        .json(
+          await service.update(
+            request.user,
+            request.validated.params.complaintId,
+            request.validated.body,
+          ),
+        ),
+
+    remove: async (request, response) =>
+      response
+        .set('Cache-Control', 'no-store')
+        .json(await service.remove(request.user, request.validated.params.complaintId)),
+
+    create: async (request, response) =>
+      response
+        .status(201)
+        .set('Cache-Control', 'no-store')
+        .json({
+          complaint: await service.create(
+            request.user,
+            request.validated.params.orderId,
+            request.validated.body,
+          ),
+        }),
+
+    order: async (request, response) =>
+      response
+        .set('Cache-Control', 'no-store')
+        .json(await service.order(request.user, request.validated.params.orderId)),
+
+    list: async (request, response) =>
+      response
+        .set('Cache-Control', 'no-store')
+        .json(await service.list(request.user, request.validated.query)),
+
+    own: async (request, response) =>
+      response
+        .set('Cache-Control', 'no-store')
+        .json({ complaint: await service.own(request.user, request.validated.params.complaintId) }),
+  };
+}
