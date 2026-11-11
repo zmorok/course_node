@@ -1,3 +1,4 @@
+// запись изменения статуса приглашения в аудит и уведомление участников
 export async function recordInvitationChange(transactionRepository, row, actorId, status, reason) {
   await transactionRepository.audit(actorId, 'INVITATION_STATUS_CHANGED', 'invitation', row.id, {
     status,

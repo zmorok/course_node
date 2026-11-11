@@ -21,6 +21,7 @@ function toInvitationDto(row, actor) {
 }
 
 export function createInvitationService({ repository, transaction, assignmentService }) {
+  // закрытие просроченных приглашений и откликов с аудитом и уведомлениями
   async function expirePendingSources(transactionRepository, proposalRepository, projectId) {
     const rows = await transactionRepository.expire(projectId);
 
@@ -34,6 +35,7 @@ export function createInvitationService({ repository, transaction, assignmentSer
     return rows.map((row) => row.id);
   }
 
+  // выполнение транзакции с обработкой конфликта и ошибки после её фиксации
   async function runInvitationTransaction(operation) {
     try {
       const result = await transaction(operation);
@@ -56,6 +58,7 @@ export function createInvitationService({ repository, transaction, assignmentSer
     }
   }
 
+  // принятие или отклонение приглашения после проверки прав и актуальности условий
   async function decideInvitation(actor, id, kind, reason) {
     const context = await repository.context(id);
 
@@ -150,6 +153,7 @@ export function createInvitationService({ repository, transaction, assignmentSer
   }
 
   return {
+    // метод получения собственных проектов, на которые можно пригласить исполнителя
     async availableProjects(actor, freelancerId) {
       requireFileActor(actor);
 
@@ -169,6 +173,7 @@ export function createInvitationService({ repository, transaction, assignmentSer
       }));
     },
 
+    // метод приглашения исполнителя на свой открытый проект с проверкой срока и дубликатов
     async create(actor, projectId, input) {
       const context = await repository.projectContext(projectId);
 
@@ -245,6 +250,7 @@ export function createInvitationService({ repository, transaction, assignmentSer
       );
     },
 
+    // метод получения приглашения, доступного текущему участнику
     async get(actor, id) {
       requireFileActor(actor);
 
@@ -257,6 +263,7 @@ export function createInvitationService({ repository, transaction, assignmentSer
       return toInvitationDto(row, actor);
     },
 
+    // метод получения отправленных или полученных приглашений по фильтрам
     async listOwn(actor, query) {
       requireFileActor(actor);
 
@@ -273,6 +280,7 @@ export function createInvitationService({ repository, transaction, assignmentSer
       };
     },
 
+    // метод получения приглашений по собственному проекту
     async listProject(actor, projectId, query) {
       requireFileActor(actor);
 
@@ -292,8 +300,10 @@ export function createInvitationService({ repository, transaction, assignmentSer
       };
     },
 
+    // метод принятия приглашения с назначением исполнителя и созданием заказа
     accept: (actor, id) => decideInvitation(actor, id, 'accept'),
 
+    // метод отклонения приглашения с указанием причины
     decline: (actor, id, reason) => decideInvitation(actor, id, 'decline', reason),
   };
 }

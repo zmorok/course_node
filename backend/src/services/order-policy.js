@@ -4,6 +4,7 @@ import { requireFileActor } from './file.service.js';
 
 const activeOrderStatuses = new Set(['IN_PROGRESS', 'SUBMITTED', 'REVISION_REQUESTED']);
 
+// определение роли пользователя в заказе: заказчик, исполнитель или посторонний
 export function orderMode(actor, order) {
   if (!actor?.id || !order) {
     return null;
@@ -20,8 +21,9 @@ export function orderMode(actor, order) {
   return null;
 }
 
-// Domain permissions are independent of a selected list mode or UI controls.
-// Each future command must re-read its context under locks and call this guard.
+// права определяются состоянием заказа и не зависят от выбранного режима списка или кнопок интерфейса
+// перед изменением заказа повторно читаем данные под блокировками и проверяем разрешённое действие
+// определение доступных действий по роли участника и текущему состоянию заказа
 export function orderPermissions(actor, order) {
   const mode = orderMode(actor, order);
   const canRead = Boolean(mode && activeClient(actor));
@@ -52,6 +54,7 @@ export function orderPermissions(actor, order) {
   };
 }
 
+// проверка доступа участника к конкретному действию с заказом
 export function requireOrderAction(actor, order, action) {
   requireFileActor(actor);
 

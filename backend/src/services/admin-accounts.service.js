@@ -5,6 +5,7 @@ import { hashPassword } from '../utils/password.js';
 const missing = () => new AppError(404, 'USER_NOT_FOUND', 'Пользователь не найден');
 
 export function createAdminAccountsService({ repository, transaction, dto: toUserDto }) {
+  // выполнение операции с аккаунтом в транзакции с повторной проверкой прав
   async function runAccountOperation(actor, id, operation) {
     requireAdmin(actor);
 
@@ -33,6 +34,7 @@ export function createAdminAccountsService({ repository, transaction, dto: toUse
     }
   }
 
+  // проверка смены роли с защитой последнего администратора и активных связей
   async function canChangeRole(transactionRepository, target, next) {
     if (target.role === next) {
       return;
@@ -56,6 +58,7 @@ export function createAdminAccountsService({ repository, transaction, dto: toUse
   }
 
   return {
+    // метод создания аккаунта администратором с хешированием пароля
     createUser: (actor, input) =>
       runAccountOperation(actor, null, async (transactionRepository) => {
         const id = await transactionRepository.insertAccount(
@@ -70,6 +73,7 @@ export function createAdminAccountsService({ repository, transaction, dto: toUse
         return { user: toUserDto(await transactionRepository.user(id)) };
       }),
 
+    // метод изменения аккаунта с отзывом сессий при смене важных данных
     updateUser: (actor, id, input) =>
       runAccountOperation(actor, id, async (transactionRepository, target) => {
         if (input.role) {
@@ -110,6 +114,7 @@ export function createAdminAccountsService({ repository, transaction, dto: toUse
         return { user: after };
       }),
 
+    // метод удаления аккаунта с защитой последнего администратора и активных связей
     deleteUser: (actor, id, input) =>
       runAccountOperation(actor, id, async (transactionRepository, target) => {
         if (target.role === 'ADMIN' && (await transactionRepository.activeAdmins()) <= 1) {

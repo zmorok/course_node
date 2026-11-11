@@ -24,6 +24,7 @@ const toComplaintDto = (row) => ({
 });
 
 export function createComplaintService({ repository, transaction, fileService }) {
+  // изменение или удаление собственной жалобы до начала её рассмотрения
   async function changeOwnComplaint(actor, id, input) {
     requireFileActor(actor);
 
@@ -97,10 +98,13 @@ export function createComplaintService({ repository, transaction, fileService })
   }
 
   return {
+    // метод изменения текста и вложений собственной новой жалобы
     update: (actor, id, input) => changeOwnComplaint(actor, id, input),
 
+    // метод удаления собственной новой жалобы
     remove: (actor, id) => changeOwnComplaint(actor, id),
 
+    // метод получения своей жалобы по заказу и возможности подать новую
     async order(actor, id) {
       requireFileActor(actor);
 
@@ -119,6 +123,7 @@ export function createComplaintService({ repository, transaction, fileService })
       };
     },
 
+    // метод подачи жалобы на вторую сторону завершённого или отменённого заказа
     async create(actor, id, input) {
       requireFileActor(actor);
 
@@ -190,6 +195,7 @@ export function createComplaintService({ repository, transaction, fileService })
       }
     },
 
+    // метод получения списка собственных жалоб по фильтрам
     async list(actor, query) {
       requireFileActor(actor);
 
@@ -205,6 +211,7 @@ export function createComplaintService({ repository, transaction, fileService })
       };
     },
 
+    // метод получения подробных данных собственной жалобы
     async own(actor, id) {
       requireFileActor(actor);
 

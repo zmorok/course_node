@@ -31,6 +31,7 @@ function toReviewDto(row, isPublic = false) {
 }
 
 export function createReviewService({ repository, transaction }) {
+  // замена изображений отзыва с проверкой владельца и очисткой старых вложений
   async function replaceReviewAttachments(transactionRepository, actor, id, ids = []) {
     const before = (await transactionRepository.find(id)).files ?? [];
     const retained = before.map((file) => file.id);
@@ -55,6 +56,7 @@ export function createReviewService({ repository, transaction }) {
     );
   }
 
+  // выполнение операции с отзывом в транзакции после проверки участников и статуса заказа
   async function runReviewOperation(actor, context, operation) {
     requireFileActor(actor);
 
@@ -108,6 +110,7 @@ export function createReviewService({ repository, transaction }) {
     }
   }
 
+  // изменение, скрытие или восстановление собственного отзыва с записью аудита
   async function changeReview(actor, id, kind, input) {
     requireFileActor(actor);
 
@@ -152,6 +155,7 @@ export function createReviewService({ repository, transaction }) {
   }
 
   return {
+    // метод создания отзыва о второй стороне завершённого или отменённого заказа
     async create(actor, orderId, input) {
       requireFileActor(actor);
 
@@ -185,6 +189,7 @@ export function createReviewService({ repository, transaction }) {
       });
     },
 
+    // метод получения отзывов по заказу и возможности оставить свой отзыв
     async order(actor, orderId) {
       requireFileActor(actor);
 
@@ -208,6 +213,7 @@ export function createReviewService({ repository, transaction }) {
       };
     },
 
+    // метод получения своих отправленных или полученных отзывов по фильтрам
     async own(actor, query) {
       requireFileActor(actor);
 
@@ -224,6 +230,7 @@ export function createReviewService({ repository, transaction }) {
       };
     },
 
+    // метод получения публичных отзывов о пользователе
     async public(userId, query) {
       const result = await repository.list(query, { userId });
 
@@ -242,10 +249,13 @@ export function createReviewService({ repository, transaction }) {
       };
     },
 
+    // метод изменения оценки, текста и изображений собственного отзыва
     update: (actor, id, input) => changeReview(actor, id, 'update', input),
 
+    // метод скрытия собственного отзыва из публичного просмотра
     hide: (actor, id) => changeReview(actor, id, 'hide'),
 
+    // метод восстановления ранее скрытого собственного отзыва
     restore: (actor, id) => changeReview(actor, id, 'restore'),
   };
 }

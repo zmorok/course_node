@@ -25,6 +25,7 @@ function toOwnProfile(row) {
   };
 }
 
+// проверка существования аккаунта и отсутствия действующей блокировки
 function requireActiveAccount(user) {
   if (!user) {
     throw missing();
@@ -40,6 +41,7 @@ function requireActiveAccount(user) {
 
 export function createProfileService({ repository, transaction }) {
   return {
+    // метод получения собственного профиля с контактными данными
     async getOwn(actor) {
       const row = await repository.findOwn(actor.id);
 
@@ -50,6 +52,7 @@ export function createProfileService({ repository, transaction }) {
       return toOwnProfile(row);
     },
 
+    // метод получения публичного профиля с навыками и рейтингами
     async getPublic(userId) {
       const row = await repository.findPublic(userId);
 
@@ -78,6 +81,7 @@ export function createProfileService({ repository, transaction }) {
       };
     },
 
+    // метод изменения своего профиля с проверкой текущего пароля при смене email
     async updateOwn(actor, input) {
       try {
         return await transaction(async (transactionRepository) => {
@@ -135,6 +139,7 @@ export function createProfileService({ repository, transaction }) {
       }
     },
 
+    // метод смены пароля с проверкой текущего и отзывом всех сессий
     async changePassword(actor, input) {
       return transaction(async (transactionRepository) => {
         const user = await transactionRepository.lockAccount(actor.id);
@@ -159,10 +164,12 @@ export function createProfileService({ repository, transaction }) {
       });
     },
 
+    // метод получения справочника доступных навыков
     async listSkills() {
       return repository.listSkills();
     },
 
+    // метод замены собственных навыков с проверкой их наличия в справочнике
     async replaceSkills(actor, ids) {
       return transaction(async (transactionRepository) => {
         const user = await transactionRepository.lockAccount(actor.id);

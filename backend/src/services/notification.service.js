@@ -1,5 +1,6 @@
 import { AppError } from '../utils/app-error.js';
 
+// проверка входа в аккаунт и отсутствия действующей блокировки
 function requireActiveUser(actor) {
   if (!actor) {
     throw new AppError(401, 'UNAUTHENTICATED', 'Войдите в аккаунт');
@@ -13,7 +14,8 @@ function requireActiveUser(actor) {
   }
 }
 
-// Несколько связанных сущностей могут присутствовать одновременно; порядок задаёт приоритет перехода.
+// если связано несколько сущностей, выбираем первую по указанному ниже приоритету
+// выбор ссылки для уведомления по приоритету связанных сущностей
 function getNotificationHref(row) {
   if (row.moderation_action_id) {
     return '/me/warnings';
@@ -64,6 +66,7 @@ function toNotificationDto(row) {
 
 export function createNotificationService({ repository }) {
   return {
+    // метод получения своих уведомлений с количеством непрочитанных
     async list(actor, query) {
       requireActiveUser(actor);
 
@@ -78,12 +81,14 @@ export function createNotificationService({ repository }) {
       };
     },
 
+    // метод получения количества непрочитанных уведомлений
     async unread(actor) {
       requireActiveUser(actor);
 
       return { unreadCount: await repository.unread(actor.id) };
     },
 
+    // метод отметки одного собственного уведомления как прочитанного
     async markRead(actor, id) {
       requireActiveUser(actor);
 
@@ -96,6 +101,7 @@ export function createNotificationService({ repository }) {
       return { id: row.id, readAt: row.read_at };
     },
 
+    // метод отметки всех собственных уведомлений как прочитанных
     async markAllRead(actor) {
       requireActiveUser(actor);
 

@@ -1,3 +1,4 @@
+// запись изменения статуса отклика в аудит и уведомление участников
 export async function recordProposalChange(repository, row, actorId, status, reason) {
   await repository.audit(actorId, 'PROPOSAL_STATUS_CHANGED', 'proposal', row.id, {
     status,

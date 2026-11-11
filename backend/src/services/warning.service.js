@@ -4,6 +4,7 @@ import { requireAdmin } from './admin-policy.js';
 
 export function createWarningService({ repository, transaction }) {
   return {
+    // метод получения предупреждений и блокировок текущего клиента по фильтрам
     async list(actor, query) {
       requireFileActor(actor);
 
@@ -27,6 +28,7 @@ export function createWarningService({ repository, transaction }) {
       };
     },
 
+    // метод выдачи предупреждения клиенту администратором с аудитом и уведомлением
     async issue(actor, targetId, input) {
       requireAdmin(actor);
 

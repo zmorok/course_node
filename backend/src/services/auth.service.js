@@ -21,9 +21,10 @@ function toPublicUser(user) {
 }
 
 export async function createAuthService({ repository, transaction, accessTokens, sessionTtlDays }) {
-  // Unknown emails still perform the same password-hash verification.
+  // для неизвестного email тоже проверяем хеш, чтобы не выдавать наличие аккаунта временем ответа
   const dummyHash = await hashPassword(newRefreshToken());
 
+  // создание сессии и выдача токенов доступа и обновления
   async function issueSession(transactionRepository, user) {
     await transactionRepository.touchPresence(user.id);
 
@@ -45,6 +46,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
   }
 
   return {
+    // метод регистрации пользователя с хешированием пароля и созданием сессии
     async register(input) {
       const passwordHash = await hashPassword(input.password);
 
@@ -65,6 +67,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
       }
     },
 
+    // метод входа с проверкой пароля и блокировки аккаунта
     async login({ email, password }) {
       const user = await repository.findByEmail(email);
       const matches = await verifyPassword(user?.password_hash ?? dummyHash, password);
@@ -101,6 +104,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
       });
     },
 
+    // метод обновления токенов с отзывом сессии при повторном использовании старого токена
     async refresh(token) {
       if (!isRefreshToken(token)) {
         throw unauthorized();
@@ -145,7 +149,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
           expiresAt: user.expires_at,
         };
       });
-      // Throw only after the revocation transaction commits.
+      // выбрасываем ошибку после фиксации транзакции, чтобы отзыв сессии сохранился
       if (result.error) {
         throw result.error;
       }
@@ -153,6 +157,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
       return result;
     },
 
+    // метод определения текущего пользователя по токену доступа и действующей сессии
     async authenticate(token) {
       let identity;
 
@@ -177,6 +182,7 @@ export async function createAuthService({ repository, transaction, accessTokens,
       return toPublicUser(user);
     },
 
+    // метод выхода из аккаунта с отзывом сессии по токену обновления
     async logout(token) {
       if (isRefreshToken(token)) {
         await transaction(async (transactionRepository) => {

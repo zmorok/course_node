@@ -13,6 +13,7 @@ const deadlineInputError = () =>
     { field: 'body.proposedDeadlineAt', message: 'Укажите будущий срок, отличный от текущего' },
   ]);
 
+// запись события заказа в историю и аудит с уведомлением второй стороны
 async function recordOrderEvent(
   transactionRepository,
   order,
@@ -80,6 +81,7 @@ export function createOrderWorkService({
   transaction,
   fileService,
 }) {
+  // получение заказа с проверкой права участника на чтение
   async function getReadableOrder(actor, id) {
     requireFileActor(actor);
 
@@ -94,6 +96,7 @@ export function createOrderWorkService({
     return row;
   }
 
+  // выполнение операции в транзакции с блокировками и повторной проверкой участников
   async function runOrderOperation(actor, id, operation) {
     requireFileActor(actor);
 
@@ -163,6 +166,7 @@ export function createOrderWorkService({
     }
   }
 
+  // закрытие ожидающего запроса срока с записью причины и события
   async function closePendingDeadline(transactionRepository, order, reason) {
     if (!order.pending_deadline_id) {
       return;
@@ -181,8 +185,9 @@ export function createOrderWorkService({
     });
   }
 
+  // определение причины, по которой запрос изменения срока стал неактуален
   function getDeadlineExpirationReason(order) {
-    // Состояние заказа имеет приоритет перед актуальностью предложенного срока.
+    // состояние заказа имеет приоритет перед актуальностью предложенного срока
     if (order.status === 'SUBMITTED') {
       return 'ORDER_SUBMITTED';
     }
@@ -206,12 +211,14 @@ export function createOrderWorkService({
     return null;
   }
 
+  // проверка состояния проекта перед изменением хода выполнения заказа
   function requireActiveProject(project) {
     if (project.status !== 'IN_PROGRESS') {
       throw conflict();
     }
   }
 
+  // рассмотрение последней версии результата с принятием или запросом доработки
   async function reviewSubmission(actor, id, submissionId, input, accept) {
     return runOrderOperation(
       actor,
@@ -275,6 +282,7 @@ export function createOrderWorkService({
   }
 
   return {
+    // метод получения списка сданных версий результата заказа
     async submissions(actor, id, query) {
       await getReadableOrder(actor, id);
 
@@ -285,6 +293,7 @@ export function createOrderWorkService({
       };
     },
 
+    // метод получения истории запросов изменения срока заказа
     async deadlines(actor, id, query) {
       await getReadableOrder(actor, id);
 
@@ -295,6 +304,7 @@ export function createOrderWorkService({
       };
     },
 
+    // метод получения истории событий заказа с данными участников
     async events(actor, id, query) {
       const order = await getReadableOrder(actor, id);
       const result = await repository.listEvents(id, query);
@@ -326,6 +336,7 @@ export function createOrderWorkService({
       };
     },
 
+    // метод отмены активного заказа с указанием причины и повторным открытием проекта
     async cancel(actor, id, input) {
       return runOrderOperation(
         actor,
@@ -351,6 +362,7 @@ export function createOrderWorkService({
       );
     },
 
+    // метод сдачи новой версии результата с вложениями и передачей заказа на проверку
     async submit(actor, id, input) {
       return runOrderOperation(
         actor,
@@ -381,12 +393,15 @@ export function createOrderWorkService({
       );
     },
 
+    // метод запроса доработки последней сданной версии результата
     revision: (actor, id, submissionId, input) =>
       reviewSubmission(actor, id, submissionId, input, false),
 
+    // метод принятия последней сданной версии с завершением заказа и проекта
     accept: (actor, id, submissionId, input) =>
       reviewSubmission(actor, id, submissionId, input, true),
 
+    // метод предложения нового срока исполнителем с закрытием неактуального запроса
     async requestDeadline(actor, id, input) {
       return runOrderOperation(
         actor,
@@ -401,7 +416,7 @@ export function createOrderWorkService({
         ) => {
           requireOrderAction(current, order, 'requestDeadline');
           requireActiveProject(project);
-          // Validate before expiring an older request; invalid commands have no effects.
+          // сначала проверяем новый срок, чтобы ошибочный запрос не закрыл прежнее предложение
           if (
             Date.parse(input.proposedDeadlineAt) <= new Date(order.server_now).getTime() ||
             Date.parse(input.proposedDeadlineAt) === new Date(order.deadline_at).getTime()
@@ -432,6 +447,7 @@ export function createOrderWorkService({
       );
     },
 
+    // метод одобрения или отклонения нового срока заказчиком с проверкой актуальности
     async decideDeadline(actor, id, requestId, input, approve) {
       return runOrderOperation(
         actor,

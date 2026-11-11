@@ -14,6 +14,7 @@ export const fileDto = (row) => ({
   ...(row.in_use === undefined ? {} : { inUse: row.in_use }),
 });
 
+// проверка входа в аккаунт, отсутствия действующей блокировки и роли клиента
 export function requireFileActor(actor) {
   if (!actor) {
     throw new AppError(401, 'UNAUTHENTICATED', 'Войдите в аккаунт');
@@ -35,12 +36,14 @@ export function createFileService({ repository, transaction, storage, logger = c
   let cleanup;
 
   const service = {
+    // метод получения метаданных собственных файлов
     async listOwn(actor) {
       requireFileActor(actor);
 
       return (await repository.listOwn(actor.id)).map(fileDto);
     },
 
+    // метод проверки и сохранения файла с удалением сохранённой копии при ошибке транзакции
     async upload(actor, input) {
       requireFileActor(actor);
 
@@ -85,6 +88,7 @@ export function createFileService({ repository, transaction, storage, logger = c
       }
     },
 
+    // метод открытия доступного файла для чтения с проверкой его наличия и размера
     async open(id, actor) {
       const row = await repository.findReadable(id, actor?.id);
 
@@ -112,6 +116,7 @@ export function createFileService({ repository, transaction, storage, logger = c
       return { file: fileDto(row), stream: object.stream };
     },
 
+    // метод удаления собственного файла, который не связан с сохранёнными данными
     async remove(actor, id) {
       await transaction(async (transactionRepository) => {
         requireFileActor(await transactionRepository.lockActor(actor.id));
@@ -136,6 +141,7 @@ export function createFileService({ repository, transaction, storage, logger = c
       await service.drainDeletes();
     },
 
+    // метод проверки принадлежности файлов и возможности прикрепить их к данным
     async attachable(transactionRepository, actorId, ids, retained = []) {
       const rows = await transactionRepository.lockFiles(ids);
 
@@ -156,10 +162,12 @@ export function createFileService({ repository, transaction, storage, logger = c
       return rows;
     },
 
+    // метод получения идентификатора текущего аватара
     async getAvatar(actor) {
       return repository.avatar(actor.id);
     },
 
+    // метод установки или удаления аватара с очисткой прежнего неиспользуемого файла
     async setAvatar(actor, id) {
       await transaction(async (transactionRepository) => {
         requireFileActor(await transactionRepository.lockActor(actor.id));
@@ -214,6 +222,7 @@ export function createFileService({ repository, transaction, storage, logger = c
       return id;
     },
 
+    // метод очистки файлов, помеченных на удаление, с общим запуском для параллельных вызовов
     drainDeletes() {
       if (!cleanup) {
         cleanup = (async () => {

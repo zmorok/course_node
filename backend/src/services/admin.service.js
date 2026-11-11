@@ -61,6 +61,7 @@ const toComplaintSummary = (row) => ({
   target: { id: row.target_id, username: row.target_username },
 });
 
+// проверка срока предупреждения или блокировки
 function validateModerationAction(action) {
   if (action.type === 'PERMANENT_BLOCK' && action.expiresAt !== null) {
     throw invalid('body.expiresAt', 'Постоянная блокировка не имеет конечного срока');
@@ -76,6 +77,7 @@ function validateModerationAction(action) {
 }
 
 export function createAdminService({ repository, transaction }) {
+  // выполнение операции с жалобой в транзакции с блокировкой связанных записей
   async function runComplaintOperation(actor, id, operation) {
     requireAdmin(actor);
 
@@ -113,6 +115,7 @@ export function createAdminService({ repository, transaction }) {
     });
   }
 
+  // применение предупреждения или блокировки с записью аудита и уведомлением
   async function applySanction(transactionRepository, adminId, target, action, complaintId = null) {
     if (!target || target.deleted_at || target.role !== 'CLIENT') {
       throw new AppError(404, 'USER_NOT_FOUND', 'Клиент не найден');
@@ -179,6 +182,7 @@ export function createAdminService({ repository, transaction }) {
 
   return {
     ...createAdminAccountsService({ repository, transaction, dto: toUserDto }),
+    // метод получения списка пользователей по фильтрам
     async users(actor, query) {
       requireAdmin(actor);
 
@@ -192,6 +196,7 @@ export function createAdminService({ repository, transaction }) {
       };
     },
 
+    // метод получения карточки пользователя с санкциями и связанными жалобами
     async user(actor, id) {
       requireAdmin(actor);
 
@@ -213,6 +218,7 @@ export function createAdminService({ repository, transaction }) {
       };
     },
 
+    // метод получения истории санкций пользователя
     async sanctions(actor, id, query) {
       requireAdmin(actor);
 
@@ -227,6 +233,7 @@ export function createAdminService({ repository, transaction }) {
       };
     },
 
+    // метод блокировки клиента администратором
     async block(actor, id, input) {
       requireAdmin(actor);
 
@@ -245,6 +252,7 @@ export function createAdminService({ repository, transaction }) {
       });
     },
 
+    // метод снятия блокировки клиента с записью причины
     async unblock(actor, id, input) {
       requireAdmin(actor);
 
@@ -282,6 +290,7 @@ export function createAdminService({ repository, transaction }) {
       });
     },
 
+    // метод получения очереди жалоб по фильтрам
     async queue(actor, query) {
       requireAdmin(actor);
 
@@ -295,6 +304,7 @@ export function createAdminService({ repository, transaction }) {
       };
     },
 
+    // метод получения жалобы с заказом, проектом, участниками и доступными действиями
     async detail(actor, id) {
       requireAdmin(actor);
 
@@ -354,6 +364,7 @@ export function createAdminService({ repository, transaction }) {
       };
     },
 
+    // метод получения результатов, запросов срока, событий или отзывов по заказу из жалобы
     async context(actor, id, section, query) {
       requireAdmin(actor);
 
@@ -377,6 +388,7 @@ export function createAdminService({ repository, transaction }) {
       };
     },
 
+    // метод принятия новой жалобы на рассмотрение текущим администратором
     claim: (actor, id) =>
       runComplaintOperation(actor, id, async (transactionRepository, complaint) => {
         if (complaint.status !== 'NEW') {
@@ -397,6 +409,7 @@ export function createAdminService({ repository, transaction }) {
         return { complaintId: id, status: 'IN_REVIEW' };
       }),
 
+    // метод отклонения назначенной жалобы с обоснованием
     reject: (actor, id, input) =>
       runComplaintOperation(actor, id, async (transactionRepository, complaint) => {
         if (complaint.status !== 'IN_REVIEW' || complaint.assigned_admin_id !== actor.id) {
@@ -426,6 +439,7 @@ export function createAdminService({ repository, transaction }) {
         return { complaintId: id, status: 'REJECTED' };
       }),
 
+    // метод завершения рассмотрения назначенной жалобы с применением выбранных санкций
     resolve: (actor, id, input) =>
       runComplaintOperation(actor, id, async (transactionRepository, complaint, users) => {
         if (complaint.status !== 'IN_REVIEW' || complaint.assigned_admin_id !== actor.id) {

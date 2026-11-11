@@ -18,6 +18,7 @@ function stable(value) {
   return value;
 }
 
+// разбор и проверка архива аудита с подготовкой данных и хешей для импорта
 export function parseAuditArchive(buffer) {
   let payload;
 

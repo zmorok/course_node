@@ -37,6 +37,7 @@ function toOrderSummary(row, actor) {
 
 export function createOrderService({ repository }) {
   return {
+    // метод получения заказов текущего участника по фильтрам
     async list(actor, query) {
       requireFileActor(actor);
 
@@ -52,6 +53,7 @@ export function createOrderService({ repository }) {
       };
     },
 
+    // метод получения карточки заказа с файлами, доступными действиями и текущими результатами
     async get(actor, id) {
       requireFileActor(actor);
 

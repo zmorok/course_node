@@ -5,6 +5,7 @@ import { auditData } from '../utils/audit-data.js';
 
 export function createAuditService({ repository, transaction }) {
   return {
+    // метод выгрузки событий аудита в архив с ограничением количества и размера
     async export(actor, query) {
       requireAdmin(actor);
 
@@ -36,6 +37,7 @@ export function createAuditService({ repository, transaction }) {
       return result;
     },
 
+    // метод загрузки событий из архива с пропуском дубликатов и записью результата в аудит
     async import(actor, buffer) {
       requireAdmin(actor);
 
@@ -55,6 +57,7 @@ export function createAuditService({ repository, transaction }) {
       });
     },
 
+    // метод получения списка импортированных событий аудита
     async imported(actor, query) {
       requireAdmin(actor);
 
@@ -63,6 +66,7 @@ export function createAuditService({ repository, transaction }) {
       return { ...result, page: query.page, pageSize: query.pageSize };
     },
 
+    // метод получения журнала аудита с фильтрами и подготовкой данных для ответа
     async list(actor, query) {
       requireAdmin(actor);
 

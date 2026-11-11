@@ -2,8 +2,9 @@ import { AppError } from '../utils/app-error.js';
 import { recordProposalChange } from './proposal-events.js';
 import { recordInvitationChange } from './invitation-events.js';
 
-// Both callers own one transaction and lock users (UUID order), project, then source.
+// код блокирует в одной транзакции пользователей по UUID, проект и отклик или приглашение
 export function createAssignmentService() {
+  // принятие отклика или приглашения с созданием заказа и закрытием остальных предложений
   async function accept({
     project,
     source,
@@ -61,6 +62,7 @@ export function createAssignmentService() {
   }
 
   return {
+    // метод назначения исполнителя по принятому отклику
     acceptProposal: ({ proposal, ...context }) =>
       accept({
         ...context,
@@ -70,6 +72,7 @@ export function createAssignmentService() {
         record: recordProposalChange,
       }),
 
+    // метод назначения исполнителя по принятому приглашению
     acceptInvitation: ({ invitation, invitations: invitationRepository, ...context }) =>
       accept({
         ...context,

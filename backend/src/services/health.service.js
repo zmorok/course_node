@@ -2,6 +2,7 @@ import { access, constants } from 'node:fs/promises';
 
 export function createHealthService({ healthRepository, uploadDir, checkStorage = access }) {
   return {
+    // метод проверки соединения с базой и прав чтения и записи в папку загрузок
     async getHealth() {
       const results = await Promise.allSettled([
         healthRepository.ping(),

@@ -43,6 +43,7 @@ function toProjectDto(row, actor) {
   };
 }
 
+// проверка того, что заданный желаемый срок ещё не истёк
 function requireFutureDeadline(value) {
   if (value && new Date(value).getTime() <= Date.now()) {
     throw new ValidationError([
@@ -52,6 +53,7 @@ function requireFutureDeadline(value) {
 }
 
 export function createProjectService({ repository, transaction, fileService }) {
+  // закрытие ожидающих откликов и приглашений с аудитом и уведомлениями
   async function closePendingProposalsAndInvitations(transactionRepository, id, reason, actorId) {
     const closed = await transactionRepository.closePending(id, reason);
 
@@ -79,6 +81,7 @@ export function createProjectService({ repository, transaction, fileService }) {
     }
   }
 
+  // проверка категории и навыков проекта по справочникам
   async function validateReferences(transactionRepository, input) {
     const valid = await transactionRepository.validReferences(input.categoryId, input.skillIds);
     const issues = [];
@@ -96,6 +99,7 @@ export function createProjectService({ repository, transaction, fileService }) {
     }
   }
 
+  // проверка возможности изменить проект по статусу и отсутствию активного заказа
   async function requireMutableProject(transactionRepository, row) {
     if (
       !['DRAFT', 'OPEN'].includes(row.status) ||
@@ -105,6 +109,7 @@ export function createProjectService({ repository, transaction, fileService }) {
     }
   }
 
+  // выполнение операции со своим проектом в транзакции с последующей очисткой файлов
   async function runOwnProjectOperation(actor, id, operation) {
     const result = await transaction(async (transactionRepository, fileRepository) => {
       requireFileActor(await fileRepository.lockActor(actor.id));
@@ -123,6 +128,7 @@ export function createProjectService({ repository, transaction, fileService }) {
     return result;
   }
 
+  // применение изменений проекта с проверкой условий, вложений и закрытием старых предложений
   async function applyProjectPatch(transactionRepository, fileRepository, row, actor, patch) {
     await requireMutableProject(transactionRepository, row);
 
@@ -202,10 +208,12 @@ export function createProjectService({ repository, transaction, fileService }) {
   }
 
   return {
+    // метод получения справочника категорий проектов
     async categories() {
       return repository.categories();
     },
 
+    // метод получения доступных или собственных проектов по фильтрам
     async list(query, actor, mine = false) {
       if (mine) {
         requireFileActor(actor);
@@ -221,6 +229,7 @@ export function createProjectService({ repository, transaction, fileService }) {
       };
     },
 
+    // метод получения одного проекта с проверкой его видимости для пользователя
     async get(id, actor) {
       const row = await repository.findVisible(id, actor?.id);
 
@@ -231,6 +240,7 @@ export function createProjectService({ repository, transaction, fileService }) {
       return toProjectDto(row, actor);
     },
 
+    // метод создания черновика проекта с проверкой лимита, справочников и вложений
     async create(actor, input) {
       return transaction(async (transactionRepository, fileRepository) => {
         requireFileActor(await fileRepository.lockActor(actor.id));
@@ -260,12 +270,14 @@ export function createProjectService({ repository, transaction, fileService }) {
       });
     },
 
+    // метод частичного изменения собственного проекта
     async patch(actor, id, input) {
       return runOwnProjectOperation(actor, id, (transactionRepository, fileRepository, row) =>
         applyProjectPatch(transactionRepository, fileRepository, row, actor, input),
       );
     },
 
+    // метод публикации своего черновика после проверки обязательных данных и срока
     async publish(actor, id) {
       return runOwnProjectOperation(
         actor,
@@ -299,6 +311,7 @@ export function createProjectService({ repository, transaction, fileService }) {
       );
     },
 
+    // метод отмены своего проекта с закрытием ожидающих откликов и приглашений
     async cancel(actor, id, reason) {
       return runOwnProjectOperation(
         actor,
@@ -326,6 +339,7 @@ export function createProjectService({ repository, transaction, fileService }) {
       );
     },
 
+    // метод удаления собственного черновика без истории с очисткой неиспользуемых файлов
     async remove(actor, id) {
       return runOwnProjectOperation(
         actor,
@@ -351,6 +365,7 @@ export function createProjectService({ repository, transaction, fileService }) {
       );
     },
 
+    // метод прикрепления файла к своему проекту с проверкой лимита вложений
     async attachFile(actor, id, fileId) {
       return runOwnProjectOperation(
         actor,
@@ -373,6 +388,7 @@ export function createProjectService({ repository, transaction, fileService }) {
       );
     },
 
+    // метод открепления файла от своего проекта с применением общих проверок изменения
     async detachFile(actor, id, fileId) {
       return runOwnProjectOperation(
         actor,

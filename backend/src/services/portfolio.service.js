@@ -17,12 +17,14 @@ const toPortfolioItemDto = (row) => ({
 
 export function createPortfolioService({ repository, transaction, fileService }) {
   return {
+    // метод получения собственных работ портфолио
     async listOwn(actor) {
       requireFileActor(actor);
 
       return (await repository.list(actor.id)).map(toPortfolioItemDto);
     },
 
+    // метод получения портфолио публично доступного пользователя
     async listPublic(userId) {
       if (!(await repository.publicUser(userId))) {
         throw new AppError(404, 'PROFILE_NOT_FOUND', 'Профиль не найден');
@@ -31,6 +33,7 @@ export function createPortfolioService({ repository, transaction, fileService })
       return (await repository.list(userId)).map(toPortfolioItemDto);
     },
 
+    // метод получения одной собственной работы портфолио
     async getOwn(actor, id) {
       requireFileActor(actor);
 
@@ -43,6 +46,7 @@ export function createPortfolioService({ repository, transaction, fileService })
       return toPortfolioItemDto(row);
     },
 
+    // метод создания или изменения работы портфолио с проверкой вложений и очисткой старых файлов
     async save(actor, id, input) {
       const result = await transaction(async (transactionRepository, fileRepository) => {
         requireFileActor(await fileRepository.lockActor(actor.id));
@@ -98,6 +102,7 @@ export function createPortfolioService({ repository, transaction, fileService })
       return result;
     },
 
+    // метод удаления собственной работы портфолио с очисткой неиспользуемых файлов
     async remove(actor, id) {
       await transaction(async (transactionRepository, fileRepository) => {
         requireFileActor(await fileRepository.lockActor(actor.id));

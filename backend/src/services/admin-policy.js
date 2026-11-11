@@ -1,5 +1,6 @@
 import { AppError } from '../utils/app-error.js';
 
+// проверка входа в аккаунт, отсутствия действующей блокировки и роли администратора
 export function requireAdmin(actor) {
   if (!actor) {
     throw new AppError(401, 'UNAUTHENTICATED', 'Войдите в аккаунт');

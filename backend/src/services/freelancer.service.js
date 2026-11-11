@@ -1,5 +1,6 @@
 export function createFreelancerService({ repository }) {
   return {
+    // метод поиска исполнителей по фильтрам с упаковкой карточек и данных пагинации
     async list(query) {
       const result = await repository.list(query);
 

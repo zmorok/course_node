@@ -22,6 +22,7 @@ function toProposalDto(row, actor) {
 }
 
 export function createProposalService({ repository, transaction, assignmentService }) {
+  // закрытие откликов с истёкшим предложенным сроком с аудитом и уведомлениями
   async function expirePendingProposals(transactionRepository, projectId) {
     const rows = await transactionRepository.expire(projectId);
 
@@ -32,6 +33,7 @@ export function createProposalService({ repository, transaction, assignmentServi
     return rows.map((row) => row.id);
   }
 
+  // выполнение транзакции с обработкой конфликта и ошибки после её фиксации
   async function runProposalTransaction(operation) {
     try {
       const result = await transaction(operation);
@@ -50,6 +52,7 @@ export function createProposalService({ repository, transaction, assignmentServi
     }
   }
 
+  // отзыв или рассмотрение отклика после проверки прав и актуальности условий
   async function decideProposal(actor, id, kind, reason) {
     const context = await repository.proposalContext(id);
 
@@ -129,6 +132,7 @@ export function createProposalService({ repository, transaction, assignmentServi
   }
 
   return {
+    // метод создания отклика на чужой открытый проект с проверкой срока и дубликатов
     async create(actor, projectId, input) {
       const context = await repository.projectContext(projectId);
 
@@ -198,6 +202,7 @@ export function createProposalService({ repository, transaction, assignmentServi
       });
     },
 
+    // метод получения отклика, доступного текущему участнику
     async get(actor, id) {
       requireFileActor(actor);
 
@@ -210,6 +215,7 @@ export function createProposalService({ repository, transaction, assignmentServi
       return toProposalDto(row, actor);
     },
 
+    // метод получения собственных откликов по фильтрам
     async listOwn(actor, query) {
       requireFileActor(actor);
 
@@ -226,6 +232,7 @@ export function createProposalService({ repository, transaction, assignmentServi
       };
     },
 
+    // метод получения откликов по собственному проекту
     async listProject(actor, projectId, query) {
       requireFileActor(actor);
 
@@ -245,10 +252,13 @@ export function createProposalService({ repository, transaction, assignmentServi
       };
     },
 
+    // метод отзыва своего ожидающего отклика
     withdraw: (actor, id) => decideProposal(actor, id, 'withdraw'),
 
+    // метод отклонения отклика заказчиком с указанием причины
     reject: (actor, id, reason) => decideProposal(actor, id, 'reject', reason),
 
+    // метод принятия отклика с назначением исполнителя и созданием заказа
     accept: (actor, id) => decideProposal(actor, id, 'accept'),
   };
 }

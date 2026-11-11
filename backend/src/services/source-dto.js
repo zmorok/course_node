@@ -1,8 +1,10 @@
+// проверка роли клиента и доступности аккаунта с учётом срока блокировки
 export const activeClient = (user) =>
   user?.role === 'CLIENT' &&
   (user.status === 'ACTIVE' ||
     (user.blocked_until && new Date(user.blocked_until).getTime() <= Date.now()));
 
+// общая упаковка данных отклика или приглашения со связанным заказом
 export function sourceDto(row) {
   return {
     id: row.id,

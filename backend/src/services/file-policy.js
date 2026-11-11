@@ -26,6 +26,7 @@ const unsupported = () =>
     'Поддерживаются PNG, JPEG, GIF, BMP, WebP, PDF, TXT, DOCX, ZIP и MP4',
   );
 
+// проверка имени файла и соответствия заявленного типа его расширению
 export function validateFileHeader(file) {
   const name = file.originalname;
 
@@ -44,6 +45,7 @@ export function validateFileHeader(file) {
   }
 }
 
+// проверка размера и содержимого файла с определением формата и вычислением хеша
 export async function inspectFile(file) {
   if (!file?.buffer?.length) {
     throw new AppError(422, 'EMPTY_FILE', 'Выберите непустой файл');
