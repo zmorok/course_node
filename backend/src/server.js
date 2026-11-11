@@ -1,47 +1,55 @@
-import { createNotificationRepository } from './repositories/notification.repository.js';
-import { createNotificationService } from './services/notification.service.js';
 import { mkdir } from 'node:fs/promises';
+
+// настройка приложения, конфигурация, руты
 import { createApp } from './app.js';
 import { ConfigurationError, loadConfig } from './config/env.js';
 import { createDatabasePool } from './config/database.js';
-import { createHealthRepository } from './repositories/health.repository.js';
-import { createHealthService } from './services/health.service.js';
 import { createApiRouter } from './routes/index.js';
-import { createAuthRepository } from './repositories/auth.repository.js';
-import { withTransaction } from './repositories/transaction.js';
-import { createAuthService } from './services/auth.service.js';
-import { createAccessTokens } from './utils/tokens.js';
-import { createProfileRepository } from './repositories/profile.repository.js';
-import { createProfileService } from './services/profile.service.js';
-import { createFileRepository } from './repositories/file.repository.js';
-import { createFileService } from './services/file.service.js';
-import { createLocalStorage } from './storage/local-storage.js';
-import { createPortfolioRepository } from './repositories/portfolio.repository.js';
-import { createPortfolioService } from './services/portfolio.service.js';
-import { createProjectRepository } from './repositories/project.repository.js';
-import { createProjectService } from './services/project.service.js';
-import { createProposalRepository } from './repositories/proposal.repository.js';
-import { createAssignmentRepository } from './repositories/assignment.repository.js';
-import { createProposalService } from './services/proposal.service.js';
-import { createAssignmentService } from './services/assignment.service.js';
-import { createFreelancerRepository } from './repositories/freelancer.repository.js';
-import { createFreelancerService } from './services/freelancer.service.js';
-import { createInvitationRepository } from './repositories/invitation.repository.js';
-import { createInvitationService } from './services/invitation.service.js';
-import { createOrderRepository } from './repositories/order.repository.js';
-import { createOrderService } from './services/order.service.js';
-import { createOrderWorkRepository } from './repositories/order-work.repository.js';
-import { createOrderWorkService } from './services/order-work.service.js';
-import { createReviewRepository } from './repositories/review.repository.js';
-import { createReviewService } from './services/review.service.js';
-import { createComplaintRepository } from './repositories/complaint.repository.js';
-import { createComplaintService } from './services/complaint.service.js';
-import { createWarningRepository } from './repositories/warning.repository.js';
-import { createWarningService } from './services/warning.service.js';
+
+// репозитории и обработчики транзакции
 import { createAdminRepository } from './repositories/admin.repository.js';
-import { createAdminService } from './services/admin.service.js';
+import { createAssignmentRepository } from './repositories/assignment.repository.js';
 import { createAuditRepository } from './repositories/audit.repository.js';
+import { createAuthRepository } from './repositories/auth.repository.js';
+import { createComplaintRepository } from './repositories/complaint.repository.js';
+import { createFileRepository } from './repositories/file.repository.js';
+import { createFreelancerRepository } from './repositories/freelancer.repository.js';
+import { createHealthRepository } from './repositories/health.repository.js';
+import { createInvitationRepository } from './repositories/invitation.repository.js';
+import { createNotificationRepository } from './repositories/notification.repository.js';
+import { createOrderRepository } from './repositories/order.repository.js';
+import { createOrderWorkRepository } from './repositories/order-work.repository.js';
+import { createPortfolioRepository } from './repositories/portfolio.repository.js';
+import { createProfileRepository } from './repositories/profile.repository.js';
+import { createProjectRepository } from './repositories/project.repository.js';
+import { createProposalRepository } from './repositories/proposal.repository.js';
+import { createReviewRepository } from './repositories/review.repository.js';
+import { withTransaction } from './repositories/transaction.js';
+import { createWarningRepository } from './repositories/warning.repository.js';
+
+// сервисы
+import { createAdminService } from './services/admin.service.js';
+import { createAssignmentService } from './services/assignment.service.js';
 import { createAuditService } from './services/audit.service.js';
+import { createAuthService } from './services/auth.service.js';
+import { createComplaintService } from './services/complaint.service.js';
+import { createFileService } from './services/file.service.js';
+import { createFreelancerService } from './services/freelancer.service.js';
+import { createHealthService } from './services/health.service.js';
+import { createInvitationService } from './services/invitation.service.js';
+import { createNotificationService } from './services/notification.service.js';
+import { createOrderService } from './services/order.service.js';
+import { createOrderWorkService } from './services/order-work.service.js';
+import { createPortfolioService } from './services/portfolio.service.js';
+import { createProfileService } from './services/profile.service.js';
+import { createProjectService } from './services/project.service.js';
+import { createProposalService } from './services/proposal.service.js';
+import { createReviewService } from './services/review.service.js';
+import { createWarningService } from './services/warning.service.js';
+
+// вспомогательные методы для файлового хранилища и токенов
+import { createLocalStorage } from './storage/local-storage.js';
+import { createAccessTokens } from './utils/tokens.js';
 
 let pool;
 
@@ -51,10 +59,11 @@ try {
   await mkdir(config.uploadDir, { recursive: true });
   pool = createDatabasePool(config.database);
 
+  // сервис проверки состояния: доступность базы данных и хранилища
   const healthRepository = createHealthRepository(pool);
   const healthService = createHealthService({ healthRepository, uploadDir: config.uploadDir });
 
-  // Внутри транзакции все её репозитории используют одно соединение с БД.
+  // сервис авторизации: регистрация, вход, токены и сессии
   const authService = await createAuthService({
     repository: createAuthRepository(pool),
     transaction: (operation) =>
@@ -63,12 +72,14 @@ try {
     sessionTtlDays: config.auth.sessionTtlDays,
   });
 
+  // сервис профиля: личные данные, навыки и смена пароля
   const profileService = createProfileService({
     repository: createProfileRepository(pool),
     transaction: (operation) =>
       withTransaction(pool, (client) => operation(createProfileRepository(client))),
   });
 
+  // сервис файлов: загрузка, доступ, аватары и удаление
   const fileService = createFileService({
     repository: createFileRepository(pool),
     storage: createLocalStorage(config.uploadDir),
@@ -76,10 +87,12 @@ try {
       withTransaction(pool, (client) => operation(createFileRepository(client))),
   });
 
+  // выполнение удаления файлов, которые ранее были запланированы на удаление
+  // т.е. удаление из хранилища удалённых файлов из платформы
   await fileService.drainDeletes();
-
   const cleanupTimer = setInterval(() => fileService.drainDeletes(), 60_000).unref();
 
+  // сервис портфолио: работы пользователя, навыки и вложения
   const portfolioService = createPortfolioService({
     repository: createPortfolioRepository(pool),
     fileService,
@@ -89,6 +102,7 @@ try {
       ),
   });
 
+  // сервис проектов: каталог, черновики, публикация и отмена
   const projectService = createProjectService({
     repository: createProjectRepository(pool),
     fileService,
@@ -98,6 +112,7 @@ try {
       ),
   });
 
+  // сервис откликов: подача, изменение, отзыв и выбор исполнителя
   const proposalService = createProposalService({
     repository: createProposalRepository(pool),
     assignmentService: createAssignmentService(),
@@ -107,10 +122,12 @@ try {
       ),
   });
 
+  // сервис поиска исполнителей: каталог, фильтры и сортировка
   const freelancerService = createFreelancerService({
     repository: createFreelancerRepository(pool),
   });
 
+  // сервис приглашений: предложение условий, принятие и отклонение
   const invitationService = createInvitationService({
     repository: createInvitationRepository(pool),
     assignmentService: createAssignmentService(),
@@ -124,8 +141,10 @@ try {
       ),
   });
 
+  // сервис просмотра заказов: списки, история и права участников
   const orderService = createOrderService({ repository: createOrderRepository(pool) });
 
+  // сервис выполнения заказов: результаты, доработки, сроки и завершение
   const orderWorkService = createOrderWorkService({
     repository: createOrderWorkRepository(pool),
     orders: createOrderRepository(pool),
@@ -140,12 +159,14 @@ try {
       ),
   });
 
+  // сервис отзывов: оценки, редактирование и публичные рейтинги
   const reviewService = createReviewService({
     repository: createReviewRepository(pool),
     transaction: (operation) =>
       withTransaction(pool, (client) => operation(createReviewRepository(client))),
   });
 
+  // сервис жалоб: подача, изменение и просмотр обращений
   const complaintService = createComplaintService({
     repository: createComplaintRepository(pool),
     fileService,
@@ -155,28 +176,33 @@ try {
       ),
   });
 
+  // сервис предупреждений: выдача и отметка о прочтении
   const warningService = createWarningService({
     repository: createWarningRepository(pool),
     transaction: (operation) =>
       withTransaction(pool, (client) => operation(createWarningRepository(client))),
   });
 
+  // сервис администрирования: пользователи, жалобы, санкции и блокировки
   const adminService = createAdminService({
     repository: createAdminRepository(pool),
     transaction: (operation) =>
       withTransaction(pool, (client) => operation(createAdminRepository(client))),
   });
 
+  // сервис уведомлений: список, счётчик непрочитанных и отметки о прочтении
   const notificationService = createNotificationService({
     repository: createNotificationRepository(pool),
   });
 
+  // сервис аудита: журнал событий, фильтры, импорт и экспорт
   const auditService = createAuditService({
     repository: createAuditRepository(pool),
     transaction: (operation) =>
       withTransaction(pool, (client) => operation(createAuditRepository(client))),
   });
 
+  // внедрение сервисов в API-роутер приложения
   const apiRouter = createApiRouter({
     healthService,
     authService,
@@ -236,8 +262,8 @@ try {
     });
   };
 
-  process.once('SIGTERM', shutdown);
-  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown); // Docker - SIGTERM
+  process.once('SIGINT', shutdown); // User Ctrl+C - SIGINT
 } catch (error) {
   console.error(
     error instanceof ConfigurationError

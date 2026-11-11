@@ -15,16 +15,11 @@ export function createApp({
 
   app.disable('x-powered-by');
   app.set('trust proxy', trustProxyHops);
-  app.set('query parser', 'simple');
   app.use(requestId);
   app.use(auditContext);
   app.use(helmet());
   app.use(
-    express.json({
-      limit: jsonLimitBytes,
-      strict: true,
-      type: ['application/json', 'application/*+json'],
-    }),
+    express.json({ limit: jsonLimitBytes, type: ['application/json', 'application/*+json'] }),
   );
   app.use('/api', apiRouter);
   app.use(notFound);
