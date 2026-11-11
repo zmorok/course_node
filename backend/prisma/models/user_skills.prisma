@@ -1,0 +1,11 @@
+model user_skills {
+  user_id    String   @db.Uuid
+  skill_id   String   @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  user       users    @relation("user_skills_user", fields: [user_id], references: [id])
+  skill      skills   @relation("user_skills_skill", fields: [skill_id], references: [id])
+
+  @@id([user_id, skill_id])
+  @@index([skill_id, user_id], map: "user_skills_skill_idx")
+  @@schema("workify")
+}

@@ -1,0 +1,16 @@
+model portfolio_items {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String            @db.Uuid
+  title       String            @db.VarChar(200)
+  description String
+  links       String[]          @default([])
+  created_at  DateTime          @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime          @default(now()) @db.Timestamptz(6)
+  experience  String            @default("")
+  skills      String[]          @default([])
+  user        users             @relation("portfolio_items_user", fields: [user_id], references: [id])
+  files       portfolio_files[] @relation("portfolio_files_parent")
+
+  @@index([user_id, created_at(sort: Desc), id], map: "portfolio_user_created_idx")
+  @@schema("workify")
+}

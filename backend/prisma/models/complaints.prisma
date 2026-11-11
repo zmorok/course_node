@@ -1,0 +1,30 @@
+model complaints {
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id          String               @db.Uuid
+  customer_id       String               @db.Uuid
+  freelancer_id     String               @db.Uuid
+  reporter_id       String               @db.Uuid
+  target_id         String               @db.Uuid
+  reason            String               @db.VarChar(80)
+  description       String
+  status            String               @default("NEW") @db.VarChar(15)
+  assigned_admin_id String?              @db.Uuid
+  claimed_at        DateTime?            @db.Timestamptz(6)
+  resolved_at       DateTime?            @db.Timestamptz(6)
+  resolution_note   String?
+  created_at        DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime             @default(now()) @db.Timestamptz(6)
+  files             complaint_files[]    @relation("complaint_files_parent")
+  order             orders               @relation("complaints_order", fields: [order_id], references: [id])
+  reporter          users                @relation("complaints_reporter", fields: [reporter_id], references: [id])
+  target            users                @relation("complaints_target", fields: [target_id], references: [id])
+  admin             users?               @relation("complaints_admin", fields: [assigned_admin_id], references: [id])
+  actions           moderation_actions[] @relation("moderation_actions_complaint")
+
+  @@unique([order_id, reporter_id])
+  @@index([assigned_admin_id, status, created_at, id], map: "complaints_assigned_idx")
+  @@index([status, created_at, id], map: "complaints_queue_idx")
+  @@index([reporter_id, status, created_at(sort: Desc), id], map: "complaints_reporter_idx")
+  @@index([target_id, created_at(sort: Desc), id], map: "complaints_target_idx")
+  @@schema("workify")
+}

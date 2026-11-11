@@ -1,0 +1,9 @@
+model categories {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug       String     @unique @db.VarChar(80)
+  name       String     @db.VarChar(100)
+  created_at DateTime   @default(now()) @db.Timestamptz(6)
+  projects   projects[] @relation("projects_category")
+
+  @@schema("workify")
+}

@@ -1,0 +1,10 @@
+model audit_imported_entries {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  digest        String   @unique @db.VarChar(64)
+  imported_by   String   @db.Uuid
+  imported_at   DateTime @default(dbgenerated("clock_timestamp()")) @db.Timestamptz(6)
+  original_data Json
+  importer      users    @relation("audit_imported_entries_importer", fields: [imported_by], references: [id])
+
+  @@schema("workify")
+}

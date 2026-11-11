@@ -1,0 +1,21 @@
+model order_submissions {
+  order_id       String             @db.Uuid
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  freelancer_id  String             @db.Uuid
+  version        Int
+  comment        String
+  links          String[]           @default([])
+  status         String             @default("SUBMITTED") @db.VarChar(20)
+  reviewed_by    String?            @db.Uuid
+  reviewed_at    DateTime?          @db.Timestamptz(6)
+  review_comment String?
+  created_at     DateTime           @default(now()) @db.Timestamptz(6)
+  files          submission_files[] @relation("submission_files_parent")
+  order          orders             @relation("order_submissions_order", fields: [order_id], references: [id])
+  freelancer     users              @relation("order_submissions_freelancer", fields: [freelancer_id], references: [id])
+  reviewer       users?             @relation("order_submissions_reviewer", fields: [reviewed_by], references: [id])
+
+  @@unique([id, order_id])
+  @@unique([order_id, version])
+  @@schema("workify")
+}

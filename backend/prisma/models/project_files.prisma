@@ -1,0 +1,11 @@
+model project_files {
+  project_id String       @db.Uuid
+  file_id    String       @db.Uuid
+  created_at DateTime     @default(now()) @db.Timestamptz(6)
+  parent     projects     @relation("project_files_parent", fields: [project_id], references: [id])
+  file       stored_files @relation("project_files_file", fields: [file_id], references: [id])
+
+  @@id([project_id, file_id])
+  @@index([file_id], map: "project_files_file_idx")
+  @@schema("workify")
+}

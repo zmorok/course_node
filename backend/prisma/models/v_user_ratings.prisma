@@ -1,0 +1,9 @@
+view v_user_ratings {
+  user_id                 String   @unique @db.Uuid
+  customer_rating         Decimal?
+  customer_review_count   BigInt?
+  freelancer_rating       Decimal?
+  freelancer_review_count BigInt?
+
+  @@schema("workify")
+}

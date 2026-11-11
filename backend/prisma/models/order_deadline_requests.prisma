@@ -1,0 +1,20 @@
+model order_deadline_requests {
+  order_id             String    @db.Uuid
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  freelancer_id        String    @db.Uuid
+  previous_deadline_at DateTime  @db.Timestamptz(6)
+  proposed_deadline_at DateTime  @db.Timestamptz(6)
+  reason               String
+  status               String    @default("PENDING") @db.VarChar(15)
+  decided_by           String?   @db.Uuid
+  decided_at           DateTime? @db.Timestamptz(6)
+  decision_reason      String?
+  created_at           DateTime  @default(now()) @db.Timestamptz(6)
+  order                orders    @relation("order_deadline_requests_order", fields: [order_id], references: [id])
+  freelancer           users     @relation("order_deadline_requests_freelancer", fields: [freelancer_id], references: [id])
+  reviewer             users?    @relation("order_deadline_requests_reviewer", fields: [decided_by], references: [id])
+
+  @@unique([id, order_id])
+  @@index([order_id, created_at(sort: Desc), id], map: "deadline_requests_order_created_idx")
+  @@schema("workify")
+}

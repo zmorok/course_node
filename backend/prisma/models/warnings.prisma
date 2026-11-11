@@ -1,0 +1,17 @@
+model warnings {
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moderation_action_id String             @unique @db.Uuid
+  user_id              String             @db.Uuid
+  issued_by            String             @db.Uuid
+  action_type          String             @default("WARNING") @db.VarChar(20)
+  message              String
+  expires_at           DateTime?          @db.Timestamptz(6)
+  read_at              DateTime?          @db.Timestamptz(6)
+  created_at           DateTime           @default(now()) @db.Timestamptz(6)
+  action               moderation_actions @relation("warnings_action", fields: [moderation_action_id], references: [id])
+  user                 users              @relation("warnings_user", fields: [user_id], references: [id])
+  admin                users              @relation("warnings_admin", fields: [issued_by], references: [id])
+
+  @@index([user_id, created_at(sort: Desc), id], map: "warnings_user_created_idx")
+  @@schema("workify")
+}

@@ -1,0 +1,15 @@
+model order_events {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id            String   @db.Uuid
+  actor_id            String?  @db.Uuid
+  event_type          String   @db.VarChar(40)
+  submission_id       String?  @db.Uuid
+  deadline_request_id String?  @db.Uuid
+  metadata            Json     @default("{}")
+  created_at          DateTime @default(now()) @db.Timestamptz(6)
+  order               orders   @relation("order_events_order", fields: [order_id], references: [id])
+  actor               users?   @relation("order_events_actor", fields: [actor_id], references: [id])
+
+  @@index([order_id, created_at, id], map: "order_events_timeline_idx")
+  @@schema("workify")
+}

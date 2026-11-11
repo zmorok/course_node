@@ -1,0 +1,14 @@
+view v_user_sanctions {
+  moderation_action_id String    @unique @db.Uuid
+  user_id              String?   @db.Uuid
+  admin_id             String?   @db.Uuid
+  complaint_id         String?   @db.Uuid
+  action_type          String?
+  reason               String?
+  created_at           DateTime? @db.Timestamptz(6)
+  expires_at           DateTime? @db.Timestamptz(6)
+  warning_id           String?   @db.Uuid
+  read_at              DateTime? @db.Timestamptz(6)
+
+  @@schema("workify")
+}

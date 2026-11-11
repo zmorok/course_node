@@ -1,0 +1,11 @@
+model order_files {
+  order_id   String       @db.Uuid
+  file_id    String       @db.Uuid
+  created_at DateTime     @default(now()) @db.Timestamptz(6)
+  parent     orders       @relation("order_files_parent", fields: [order_id], references: [id])
+  file       stored_files @relation("order_files_file", fields: [file_id], references: [id])
+
+  @@id([order_id, file_id])
+  @@index([file_id], map: "order_files_file_idx")
+  @@schema("workify")
+}

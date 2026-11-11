@@ -1,0 +1,11 @@
+// создание структуры базы остаётся в database/init.sql
+// объединение моделей из всех файлов каталога prisma
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["views", "relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["workify"]
+}

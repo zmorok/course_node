@@ -1,0 +1,9 @@
+model profile_files {
+  user_id    String       @id @db.Uuid
+  file_id    String       @unique @db.Uuid
+  created_at DateTime     @default(now()) @db.Timestamptz(6)
+  parent     profiles     @relation("profile_files_parent", fields: [user_id], references: [user_id])
+  file       stored_files @relation("profile_files_file", fields: [file_id], references: [id])
+
+  @@schema("workify")
+}

@@ -1,0 +1,10 @@
+model review_files {
+  review_id String       @db.Uuid
+  file_id   String       @db.Uuid
+  parent    reviews      @relation("review_files_parent", fields: [review_id], references: [id])
+  file      stored_files @relation("review_files_file", fields: [file_id], references: [id])
+
+  @@id([review_id, file_id])
+  @@index([file_id], map: "review_files_file_idx")
+  @@schema("workify")
+}

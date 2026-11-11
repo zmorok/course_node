@@ -1,0 +1,22 @@
+model stored_files {
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uploaded_by          String             @db.Uuid
+  storage_key          String             @unique @db.VarChar(200)
+  original_name        String             @db.VarChar(255)
+  mime_type            String             @db.VarChar(150)
+  size_bytes           BigInt
+  created_at           DateTime           @default(now()) @db.Timestamptz(6)
+  sha256               String?            @db.VarChar(64)
+  deleted_at           DateTime?          @db.Timestamptz(6)
+  uploader             users              @relation("stored_files_uploader", fields: [uploaded_by], references: [id])
+  ref_profile_files    profile_files?     @relation("profile_files_file")
+  ref_portfolio_files  portfolio_files[]  @relation("portfolio_files_file")
+  ref_project_files    project_files[]    @relation("project_files_file")
+  ref_order_files      order_files[]      @relation("order_files_file")
+  ref_submission_files submission_files[] @relation("submission_files_file")
+  ref_complaint_files  complaint_files[]  @relation("complaint_files_file")
+  ref_review_files     review_files[]     @relation("review_files_file")
+
+  @@index([uploaded_by, created_at(sort: Desc), id], map: "stored_files_uploader_idx")
+  @@schema("workify")
+}

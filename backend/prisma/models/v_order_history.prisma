@@ -1,0 +1,22 @@
+view v_order_history {
+  id                   String    @unique @db.Uuid
+  project_id           String?   @db.Uuid
+  customer_id          String?   @db.Uuid
+  freelancer_id        String?   @db.Uuid
+  proposal_id          String?   @db.Uuid
+  invitation_id        String?   @db.Uuid
+  title_snapshot       String?
+  description_snapshot String?
+  agreed_price         Decimal?
+  initial_deadline_at  DateTime? @db.Timestamptz(6)
+  deadline_at          DateTime? @db.Timestamptz(6)
+  status               String?
+  completed_at         DateTime? @db.Timestamptz(6)
+  cancelled_at         DateTime? @db.Timestamptz(6)
+  cancelled_by         String?   @db.Uuid
+  cancellation_reason  String?
+  created_at           DateTime? @db.Timestamptz(6)
+  updated_at           DateTime? @db.Timestamptz(6)
+
+  @@schema("workify")
+}

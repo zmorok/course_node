@@ -1,0 +1,19 @@
+model notifications {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipient_id         String    @db.Uuid
+  event_type           String    @db.VarChar(40)
+  project_id           String?   @db.Uuid
+  proposal_id          String?   @db.Uuid
+  invitation_id        String?   @db.Uuid
+  order_id             String?   @db.Uuid
+  complaint_id         String?   @db.Uuid
+  moderation_action_id String?   @db.Uuid
+  message              String
+  metadata             Json      @default("{}")
+  read_at              DateTime? @db.Timestamptz(6)
+  created_at           DateTime  @default(now()) @db.Timestamptz(6)
+  recipient            users     @relation("notifications_recipient", fields: [recipient_id], references: [id])
+
+  @@index([recipient_id, created_at(sort: Desc), id], map: "notifications_recipient_created_idx")
+  @@schema("workify")
+}
