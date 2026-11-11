@@ -26,6 +26,7 @@ secrets/
 uploads/
 postgres-data/
 /runtime/
+/compose-test.yaml
 
 # Local editor and operating system files
 .idea/
