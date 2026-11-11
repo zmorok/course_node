@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { asyncHandler } from '../utils/async-handler.js';
+
 import { AppError } from '../utils/app-error.js';
+import { asyncHandler } from '../utils/async-handler.js';
+
 import { projectParams, emptyCommand } from '../validators/projects.js';
 import {
   proposalCreate,
@@ -12,6 +12,10 @@ import {
   projectProposalQuery,
   ownProposalQuery,
 } from '../validators/proposals.js';
+
+import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+
 import { createProposalController } from '../controllers/proposal.controller.js';
 
 export function createProposalRouter(service, authService) {

@@ -1,11 +1,9 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { asyncHandler } from '../utils/async-handler.js';
+
 import { AppError } from '../utils/app-error.js';
-import { projectParams, emptyCommand } from '../validators/projects.js';
-import { profileParams } from '../validators/profile.js';
+import { asyncHandler } from '../utils/async-handler.js';
+
 import {
   invitationCreate,
   invitationDecline,
@@ -13,6 +11,12 @@ import {
   projectInvitationQuery,
   ownInvitationQuery,
 } from '../validators/invitations.js';
+import { profileParams } from '../validators/profile.js';
+import { projectParams, emptyCommand } from '../validators/projects.js';
+
+import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+
 import { createInvitationController } from '../controllers/invitation.controller.js';
 
 export function createInvitationRouter(service, authService) {

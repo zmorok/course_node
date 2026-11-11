@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { createAuthController } from '../controllers/auth.controller.js';
+
+import { AppError } from '../utils/app-error.js';
+import { asyncHandler } from '../utils/async-handler.js';
+
+import { registerInput, loginInput } from '../validators/auth.js';
+
 import { authMiddleware, roleMiddleware, authCsrf } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { registerInput, loginInput } from '../validators/auth.js';
-import { asyncHandler } from '../utils/async-handler.js';
-import { AppError } from '../utils/app-error.js';
+
+import { createAuthController } from '../controllers/auth.controller.js';
 
 export function createAuthRouter(service, config) {
   const router = Router();

@@ -1,7 +1,11 @@
 import { Router } from 'express';
-import { validate } from '../middleware/validate.js';
+
 import { asyncHandler } from '../utils/async-handler.js';
+
 import { freelancerQuery } from '../validators/freelancers.js';
+
+import { validate } from '../middleware/validate.js';
+
 import { createFreelancerController } from '../controllers/freelancer.controller.js';
 
 export function createFreelancerRouter(service) {

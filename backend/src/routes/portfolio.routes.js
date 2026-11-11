@@ -1,10 +1,14 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
+
+import { AppError } from '../utils/app-error.js';
+import { asyncHandler } from '../utils/async-handler.js';
+
+import { portfolioInput, portfolioParams, portfolioUserParams } from '../validators/portfolio.js';
+
 import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { asyncHandler } from '../utils/async-handler.js';
-import { AppError } from '../utils/app-error.js';
-import { portfolioInput, portfolioParams, portfolioUserParams } from '../validators/portfolio.js';
+
 import { createPortfolioController } from '../controllers/portfolio.controller.js';
 
 export function createPortfolioRouter(service, authService) {

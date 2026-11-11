@@ -1,15 +1,19 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { asyncHandler } from '../utils/async-handler.js';
+
 import { AppError } from '../utils/app-error.js';
+import { asyncHandler } from '../utils/async-handler.js';
+
 import {
   profilePatch,
   profileParams,
   userSkillsInput,
   passwordChange,
 } from '../validators/profile.js';
+
+import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+
 import { createProfileController } from '../controllers/profile.controller.js';
 
 export function createProfileRouter(service, authService) {

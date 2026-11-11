@@ -1,6 +1,8 @@
 import { Router } from 'express';
-import { createHealthController } from '../controllers/health.controller.js';
+
 import { asyncHandler } from '../utils/async-handler.js';
+
+import { createHealthController } from '../controllers/health.controller.js';
 
 export function createHealthRouter(healthService) {
   const router = Router();

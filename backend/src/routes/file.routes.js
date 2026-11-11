@@ -1,11 +1,15 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
+
+import { AppError } from '../utils/app-error.js';
+import { asyncHandler } from '../utils/async-handler.js';
+
+import { fileParams, avatarInput } from '../validators/files.js';
+
 import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
 import { createUploadMiddleware } from '../middleware/upload.js';
 import { validate } from '../middleware/validate.js';
-import { asyncHandler } from '../utils/async-handler.js';
-import { AppError } from '../utils/app-error.js';
-import { fileParams, avatarInput } from '../validators/files.js';
+
 import { createFileController } from '../controllers/file.controller.js';
 
 export function createFileRouter(service, authService) {

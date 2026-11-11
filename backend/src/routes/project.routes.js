@@ -1,10 +1,9 @@
 import { Router } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
-import { asyncHandler } from '../utils/async-handler.js';
+
 import { AppError } from '../utils/app-error.js';
-import { createProjectController } from '../controllers/project.controller.js';
+import { asyncHandler } from '../utils/async-handler.js';
+
 import {
   projectParams,
   projectFileParams,
@@ -16,6 +15,11 @@ import {
   ownProjectQuery,
   emptyCommand,
 } from '../validators/projects.js';
+
+import { authMiddleware, roleMiddleware } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+
+import { createProjectController } from '../controllers/project.controller.js';
 
 export function createProjectRouter(service, authService) {
   const router = Router();

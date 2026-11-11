@@ -1,14 +1,18 @@
 import { Router } from 'express';
-import { authMiddleware, authCsrf } from '../middleware/auth.js';
-import { validate } from '../middleware/validate.js';
+
 import { asyncHandler } from '../utils/async-handler.js';
-import { createNotificationController } from '../controllers/notification.controller.js';
+
 import {
   notificationQuery,
   notificationParams,
   notificationEmpty,
   notificationEmptyQuery,
 } from '../validators/notifications.js';
+
+import { authMiddleware, authCsrf } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+
+import { createNotificationController } from '../controllers/notification.controller.js';
 
 export function createNotificationRouter(service, authService) {
   const router = Router();
