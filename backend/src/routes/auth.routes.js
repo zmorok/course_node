@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
 
-import { AppError } from '../utils/app-error.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { createRateLimit } from '../utils/rate-limit.js';
 
 import { registerInput, loginInput } from '../validators/auth.js';
 
@@ -15,18 +14,8 @@ export function createAuthRouter(service, config) {
   const router = Router();
   const controller = createAuthController(service, config);
 
-  const limiter = (limit) =>
-    rateLimit({
-      windowMs: 15 * 60 * 1000,
-      limit,
-      standardHeaders: 'draft-8',
-      legacyHeaders: false,
-      handler: (_request, _response, next) =>
-        next(new AppError(429, 'RATE_LIMITED', 'Слишком много попыток. Повторите позже')),
-    });
-
-  const credentialsLimit = limiter(20);
-  const sessionLimit = limiter(120);
+  const credentialsLimit = createRateLimit(15, 20);
+  const sessionLimit = createRateLimit(15, 120);
 
   router.post(
     '/auth/register',

@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
 
-import { AppError } from '../utils/app-error.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { createRateLimit } from '../utils/rate-limit.js';
 
 import { orderParams, orderDetailQuery } from '../validators/orders.js';
 import { profileParams } from '../validators/profile.js';
@@ -24,14 +23,7 @@ export function createReviewRouter(service, authService) {
   const controller = createReviewController(service);
   const clientMiddleware = [authMiddleware(authService), roleMiddleware('CLIENT')];
 
-  const writeRateLimit = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 60,
-    standardHeaders: 'draft-8',
-    legacyHeaders: false,
-    handler: (_request, _response, next) =>
-      next(new AppError(429, 'RATE_LIMITED', 'Слишком много изменений отзывов. Повторите позже')),
-  });
+  const writeRateLimit = createRateLimit(15, 60);
 
   router.get(
     '/users/:userId/reviews',

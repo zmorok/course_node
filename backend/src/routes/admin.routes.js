@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
 
-import { AppError } from '../utils/app-error.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { createRateLimit } from '../utils/rate-limit.js';
 
 import {
   adminAccountCreate,
@@ -32,14 +31,7 @@ export function createAdminRouter(service, authService) {
   const controller = createAdminController(service);
   const adminMiddleware = [authMiddleware(authService), roleMiddleware('ADMIN')];
 
-  const writeRateLimit = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 60,
-    standardHeaders: 'draft-8',
-    legacyHeaders: false,
-    handler: (_request, _response, next) =>
-      next(new AppError(429, 'RATE_LIMITED', 'Слишком много решений. Повторите позже')),
-  });
+  const writeRateLimit = createRateLimit(15, 60);
 
   router.post(
     '/admin/users',

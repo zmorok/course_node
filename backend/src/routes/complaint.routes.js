@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
 
-import { AppError } from '../utils/app-error.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { createRateLimit } from '../utils/rate-limit.js';
 
 import { complaintInput, complaintParams, complaintQuery } from '../validators/complaints.js';
 import { orderParams, orderDetailQuery } from '../validators/orders.js';
@@ -18,14 +17,7 @@ export function createComplaintRouter(service, authService) {
   const controller = createComplaintController(service);
   const clientMiddleware = [authMiddleware(authService), roleMiddleware('CLIENT')];
 
-  const writeRateLimit = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 30,
-    standardHeaders: 'draft-8',
-    legacyHeaders: false,
-    handler: (_request, _response, next) =>
-      next(new AppError(429, 'RATE_LIMITED', 'Слишком много жалоб. Повторите позже')),
-  });
+  const writeRateLimit = createRateLimit(15, 30);
 
   router.get(
     '/orders/:orderId/complaints',

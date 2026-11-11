@@ -1,8 +1,7 @@
 import { Router } from 'express';
-import { rateLimit } from 'express-rate-limit';
 
-import { AppError } from '../utils/app-error.js';
 import { asyncHandler } from '../utils/async-handler.js';
+import { createRateLimit } from '../utils/rate-limit.js';
 
 import {
   profilePatch,
@@ -21,14 +20,7 @@ export function createProfileRouter(service, authService) {
   const controller = createProfileController(service);
   const authenticated = authMiddleware(authService);
 
-  const writeRateLimit = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 30,
-    standardHeaders: 'draft-8',
-    legacyHeaders: false,
-    handler: (_request, _response, next) =>
-      next(new AppError(429, 'RATE_LIMITED', 'Слишком много изменений. Повторите позже')),
-  });
+  const writeRateLimit = createRateLimit(15, 30);
 
   router.get('/skills', asyncHandler(controller.listSkills));
 

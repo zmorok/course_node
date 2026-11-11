@@ -1204,6 +1204,7 @@ Object.assign(english, {
   'Слишком много изменений отзывов. Повторите позже': 'Too many review changes. Try again later',
   'Слишком много изменений. Повторите позже': 'Too many changes. Try again later',
   'Слишком много попыток. Повторите позже': 'Too many attempts. Try again later',
+  'Слишком много запросов. Повторите позже': 'Too many requests. Try again later',
   'Слишком много предупреждений. Повторите позже': 'Too many warnings. Try again later',
   'Слишком много решений. Повторите позже': 'Too many decisions. Try again later',
   'Сначала завершите активные заказы или рассмотрение назначенных жалоб':
