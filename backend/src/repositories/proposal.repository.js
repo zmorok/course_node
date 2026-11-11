@@ -1,125 +1,106 @@
 import { createSourceRepository } from './source.repository.js';
-import { sourceColumns, sourceJoins } from './source-projection.js';
-
-const columns = `${sourceColumns},(s.offered_deadline_at<=clock_timestamp()) AS expired`;
-const joins = `${sourceJoins} LEFT JOIN workify.orders o ON o.proposal_id=s.id`;
+import { sourceData, sourceInclude } from './source-projection.js';
+import { databaseNow, lockRows, newest, page, plain, date } from './database-tools.js';
 
 export function createProposalRepository(database) {
-  const transactionRepository = {
+  return {
     ...createSourceRepository(database),
-    async proposalContext(id) {
-      return (
-        await database.query(
-          'SELECT id,project_id,customer_id,freelancer_id FROM workify.proposals WHERE id=$1',
-          [id],
-        )
-      ).rows[0];
-    },
 
+    // метод получения проекта и участников отклика для последующих проверок
+    proposalContext: (id) =>
+      database.proposals.findUnique({
+        where: { id },
+        select: { id: true, project_id: true, customer_id: true, freelancer_id: true },
+      }),
+
+    // метод блокировки отклика и определения актуальности предложенного срока
     async lockProposal(id) {
-      return (
-        await database.query(
-          'SELECT *,offered_price::text AS offered_price,offered_deadline_at>clock_timestamp() AS current FROM workify.proposals WHERE id=$1 FOR UPDATE',
-          [id],
-        )
-      ).rows[0];
+      await lockRows(database, 'proposals', [id]);
+
+      const row = plain(await database.proposals.findUnique({ where: { id } }));
+
+      return row
+        ? { ...row, current: row.offered_deadline_at > (await databaseNow(database)) }
+        : undefined;
     },
 
+    // метод получения отклика с проектом и заказом для одного из его участников
     async find(id, actorId) {
-      return (
-        await database.query(
-          `SELECT ${columns} FROM workify.proposals s ${joins}
-      WHERE s.id=$1 AND (s.customer_id=$2 OR s.freelancer_id=$2)`,
-          [id, actorId],
-        )
-      ).rows[0];
+      const row = await database.proposals.findFirst({
+        where: { id, OR: [{ customer_id: actorId }, { freelancer_id: actorId }] },
+        include: sourceInclude,
+      });
+
+      return row ? sourceData(row, await databaseNow(database)) : undefined;
     },
 
+    // метод получения откликов по исполнителю, проекту и статусу
     async list(query, { freelancerId, projectId }) {
-      const values = [];
-      const where = [];
+      const result = await page(database, 'proposals', query, {
+        where: { freelancer_id: freelancerId, project_id: projectId, status: query.status },
+        include: sourceInclude,
+        orderBy: newest,
+      });
+      const now = await databaseNow(database);
 
-      const bind = (value) => {
-        values.push(value);
-
-        return `$${values.length}`;
-      };
-
-      if (freelancerId) {
-        where.push(`s.freelancer_id=${bind(freelancerId)}`);
-      }
-
-      if (projectId) {
-        where.push(`s.project_id=${bind(projectId)}`);
-      }
-
-      if (query.status) {
-        where.push(`s.status=${bind(query.status)}`);
-      }
-
-      const limit = bind(query.pageSize);
-      const offset = bind((query.page - 1) * query.pageSize);
-
-      return (
-        await database.query(
-          `WITH matches AS (SELECT s.id FROM workify.proposals s WHERE ${where.join(' AND ')}),
-        page AS (SELECT ${columns} FROM workify.proposals s JOIN matches m ON m.id=s.id ${joins} ORDER BY s.created_at DESC,s.id DESC LIMIT ${limit} OFFSET ${offset})
-        SELECT (SELECT count(*) FROM matches)::int AS total,COALESCE((SELECT jsonb_agg(page ORDER BY created_at DESC,id DESC) FROM page),'[]'::jsonb) AS items`,
-          values,
-        )
-      ).rows[0];
+      return { ...result, items: result.items.map((row) => sourceData(row, now)) };
     },
 
-    async pending(projectId, freelancerId) {
-      return (
-        await database.query(
-          "SELECT id FROM workify.proposals WHERE project_id=$1 AND freelancer_id=$2 AND status='PENDING'",
-          [projectId, freelancerId],
-        )
-      ).rows[0];
-    },
+    // метод поиска ожидающего отклика исполнителя на конкретный проект
+    pending: (projectId, freelancerId) =>
+      database.proposals.findFirst({
+        where: { project_id: projectId, freelancer_id: freelancerId, status: 'PENDING' },
+        select: { id: true },
+      }),
 
+    // метод сохранения отклика с участниками проекта и предложенными условиями
     async create(project, freelancerId, input) {
       return (
-        await database.query(
-          `INSERT INTO workify.proposals (project_id,customer_id,freelancer_id,message,offered_price,offered_deadline_at)
-        VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-          [
-            project.id,
-            project.customer_id,
-            freelancerId,
-            input.message,
-            input.offeredPrice,
-            input.offeredDeadlineAt,
-          ],
-        )
-      ).rows[0].id;
+        await database.proposals.create({
+          data: {
+            project_id: project.id,
+            customer_id: project.customer_id,
+            freelancer_id: freelancerId,
+            message: input.message,
+            offered_price: input.offeredPrice,
+            offered_deadline_at: date(input.offeredDeadlineAt),
+          },
+        })
+      ).id;
     },
 
+    // метод сохранения статуса, причины закрытия и даты рассмотрения отклика
     async decide(id, status, reason) {
-      await database.query(
-        'UPDATE workify.proposals SET status=$2,closure_reason=$3,decided_at=clock_timestamp() WHERE id=$1',
-        [id, status, reason],
-      );
+      await database.proposals.updateMany({
+        where: { id },
+        data: { status, closure_reason: reason ?? null, decided_at: await databaseNow(database) },
+      });
     },
 
+    // метод отклонения ожидающих откликов с истёкшим предложенным сроком
     async expire(projectId) {
-      return (
-        await database.query(
-          "UPDATE workify.proposals SET status='REJECTED',closure_reason='TERMS_EXPIRED',decided_at=clock_timestamp() WHERE project_id=$1 AND status='PENDING' AND offered_deadline_at<=clock_timestamp() RETURNING *",
-          [projectId],
-        )
-      ).rows;
+      const now = await databaseNow(database);
+
+      return plain(
+        await database.proposals.updateManyAndReturn({
+          where: { project_id: projectId, status: 'PENDING', offered_deadline_at: { lte: now } },
+          data: { status: 'REJECTED', closure_reason: 'TERMS_EXPIRED', decided_at: now },
+        }),
+      );
     },
 
+    // метод сохранения уведомления, связанного с откликом и проектом
     async notify(recipientId, type, projectId, proposalId, message, metadata = {}) {
-      await database.query(
-        `INSERT INTO workify.notifications (recipient_id,event_type,project_id,proposal_id,message,metadata)
-        VALUES ($1,$2,$3,$4,$5,$6::jsonb)`,
-        [recipientId, type, projectId, proposalId, message, JSON.stringify(metadata)],
-      );
+      await database.notifications.create({
+        data: {
+          recipient_id: recipientId,
+          event_type: type,
+          project_id: projectId,
+          proposal_id: proposalId,
+          message,
+          metadata,
+        },
+      });
     },
   };
-
-  return transactionRepository;
 }

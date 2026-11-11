@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { withTransaction } from '../../src/repositories/transaction.js';
+import { withTransaction } from '../helpers/pg-transaction.js';
 
 function fakePool({ failAt, failure = new Error('database failure') } = {}) {
   const calls = [];

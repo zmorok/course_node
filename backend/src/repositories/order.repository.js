@@ -1,70 +1,106 @@
-const columns = `o.id,o.project_id,o.customer_id,o.freelancer_id,o.proposal_id,o.invitation_id,o.title_snapshot,o.agreed_price::text AS agreed_price,
-  o.initial_deadline_at,o.deadline_at,o.status,o.created_at,o.updated_at,o.completed_at,o.cancelled_at,COALESCE(o.completed_at,o.cancelled_at) AS closed_at,
-  (o.deadline_at<statement_timestamp() AND o.status IN ('IN_PROGRESS','SUBMITTED','REVISION_REQUESTED')) AS is_overdue,
-  p.status AS project_status,cu.username AS customer_username,cp.first_name AS customer_first_name,cp.last_name AS customer_last_name,
-  fu.username AS freelancer_username,fp.first_name AS freelancer_first_name,fp.last_name AS freelancer_last_name`;
+import {
+  databaseNow,
+  plain,
+  page,
+  newest,
+  activeStatuses,
+  userInclude,
+  fileInclude,
+  fileData,
+} from './database-tools.js';
 
-const joins = `JOIN workify.projects p ON p.id=o.project_id JOIN workify.users cu ON cu.id=o.customer_id JOIN workify.profiles cp ON cp.user_id=cu.id
-  JOIN workify.users fu ON fu.id=o.freelancer_id JOIN workify.profiles fp ON fp.user_id=fu.id`;
-const modes = { customer: 'customer_id', freelancer: 'freelancer_id' };
-
-const statuses = {
-  active: ['IN_PROGRESS', 'SUBMITTED', 'REVISION_REQUESTED'],
-  history: ['COMPLETED', 'CANCELLED'],
+export const orderInclude = {
+  project: true,
+  customer: userInclude,
+  freelancer: userInclude,
+  files: fileInclude,
+  submissions: { orderBy: { version: 'desc' }, take: 1 },
+  deadlines: { where: { status: 'PENDING' }, take: 1 },
 };
+
+export function orderData(
+  { project, customer, freelancer, files, submissions, deadlines, ...row },
+  now,
+) {
+  const submission = submissions[0],
+    deadline = deadlines[0];
+  const future = Boolean(deadline && deadline.proposed_deadline_at > now),
+    matches = Boolean(deadline && +deadline.previous_deadline_at === +row.deadline_at);
+
+  return {
+    ...plain(row),
+    closed_at: row.completed_at ?? row.cancelled_at,
+    project_status: project.status,
+    customer_username: customer.username,
+    customer_first_name: customer.profile.first_name,
+    customer_last_name: customer.profile.last_name,
+    freelancer_username: freelancer.username,
+    freelancer_first_name: freelancer.profile.first_name,
+    freelancer_last_name: freelancer.profile.last_name,
+    is_overdue: row.deadline_at < now && activeStatuses.includes(row.status),
+    files: files.map((link) => fileData(link)),
+    last_submission_id: submission?.id ?? null,
+    last_submission_version: submission?.version ?? null,
+    last_submission_status: submission?.status ?? null,
+    last_submission_created_at: submission?.created_at ?? null,
+    pending_deadline_id: deadline?.id ?? null,
+    previous_deadline_at: deadline?.previous_deadline_at ?? null,
+    proposed_deadline_at: deadline?.proposed_deadline_at ?? null,
+    deadline_request_created_at: deadline?.created_at ?? null,
+    server_now: now,
+    deadline_request_future: future,
+    deadline_request_matches: matches,
+    deadline_request_current:
+      ['IN_PROGRESS', 'REVISION_REQUESTED'].includes(row.status) && future && matches,
+  };
+}
 
 export function createOrderRepository(database) {
   return {
+    // метод получения активных или исторических заказов пользователя в выбранном режиме участия
     async list(actorId, query) {
-      const values = [actorId, statuses[query.scope]];
-      const where = [`o.${modes[query.mode]}=$1`, 'o.status=ANY($2::text[])'];
+      const where = {
+        [query.mode === 'customer' ? 'customer_id' : 'freelancer_id']: actorId,
+        status: query.status ?? {
+          in: query.scope === 'history' ? ['COMPLETED', 'CANCELLED'] : activeStatuses,
+        },
+      };
+      const now = await databaseNow(database);
 
-      if (query.status) {
-        values.push(query.status);
-        where.push(`o.status=$${values.length}`);
+      if (query.scope === 'history') {
+        const rows = await database.orders.findMany({ where, include: orderInclude });
+
+        rows.sort(
+          (a, b) =>
+            +(b.completed_at ?? b.cancelled_at) - +(a.completed_at ?? a.cancelled_at) ||
+            b.id.localeCompare(a.id),
+        );
+
+        return {
+          total: rows.length,
+          items: rows
+            .slice((query.page - 1) * query.pageSize, query.page * query.pageSize)
+            .map((row) => orderData(row, now)),
+        };
       }
 
-      values.push(query.pageSize, (query.page - 1) * query.pageSize);
+      const result = await page(database, 'orders', query, {
+        where,
+        include: orderInclude,
+        orderBy: newest,
+      });
 
-      const limit = `$${values.length - 1}`;
-      const offset = `$${values.length}`;
-
-      const order =
-        query.scope === 'history'
-          ? 'COALESCE(o.completed_at,o.cancelled_at) DESC,o.id DESC'
-          : 'o.created_at DESC,o.id DESC';
-
-      const pageOrder =
-        query.scope === 'history' ? 'closed_at DESC,id DESC' : 'created_at DESC,id DESC';
-
-      return (
-        await database.query(
-          `WITH matches AS (SELECT o.id FROM workify.orders o WHERE ${where.join(' AND ')}),
-      page AS (SELECT ${columns} FROM workify.orders o JOIN matches m ON m.id=o.id ${joins} ORDER BY ${order} LIMIT ${limit} OFFSET ${offset})
-      SELECT (SELECT count(*) FROM matches)::int AS total,COALESCE((SELECT jsonb_agg(page ORDER BY ${pageOrder}) FROM page),'[]'::jsonb) AS items`,
-          values,
-        )
-      ).rows[0];
+      return { ...result, items: result.items.map((row) => orderData(row, now)) };
     },
 
+    // метод получения заказа для его участника с вложениями, последним результатом и запросом срока
     async find(id, actorId) {
-      return (
-        await database.query(
-          `SELECT ${columns},o.description_snapshot,o.cancelled_by,o.cancellation_reason,
-    COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'originalName',f.original_name,'mimeType',f.mime_type,'sizeBytes',f.size_bytes,'createdAt',f.created_at) ORDER BY f.created_at,f.id)
-      FROM workify.order_files ofile JOIN workify.stored_files f ON f.id=ofile.file_id WHERE ofile.order_id=o.id AND f.deleted_at IS NULL),'[]'::jsonb) AS files,
-    submission.id AS last_submission_id,submission.version AS last_submission_version,submission.status AS last_submission_status,submission.created_at AS last_submission_created_at,
-    deadline.id AS pending_deadline_id,deadline.previous_deadline_at,deadline.proposed_deadline_at,deadline.created_at AS deadline_request_created_at,
-    statement_timestamp() AS server_now,COALESCE(deadline.proposed_deadline_at>statement_timestamp(),false) AS deadline_request_future,
-    COALESCE(deadline.previous_deadline_at=o.deadline_at,false) AS deadline_request_matches,
-    COALESCE(o.status IN ('IN_PROGRESS','REVISION_REQUESTED') AND deadline.proposed_deadline_at>statement_timestamp() AND deadline.previous_deadline_at=o.deadline_at,false) AS deadline_request_current
-    FROM workify.orders o ${joins}
-    LEFT JOIN LATERAL (SELECT id,version,status,created_at FROM workify.order_submissions WHERE order_id=o.id ORDER BY version DESC LIMIT 1) submission ON true
-    LEFT JOIN LATERAL (SELECT id,previous_deadline_at,proposed_deadline_at,created_at FROM workify.order_deadline_requests WHERE order_id=o.id AND status='PENDING' LIMIT 1) deadline ON true
-    WHERE o.id=$1 AND (o.customer_id=$2 OR o.freelancer_id=$2)`,
-          [id, actorId],
-        )
-      ).rows[0];
+      const row = await database.orders.findFirst({
+        where: { id, OR: [{ customer_id: actorId }, { freelancer_id: actorId }] },
+        include: orderInclude,
+      });
+
+      return row ? orderData(row, await databaseNow(database)) : undefined;
     },
   };
 }

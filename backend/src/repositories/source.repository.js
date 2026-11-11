@@ -1,24 +1,24 @@
 import { createAuditRepository } from './audit.repository.js';
-// Shared locking for both ways of assigning a project.
+import { lockRows, plain } from './database-tools.js';
+
 export function createSourceRepository(database) {
   return {
-    async projectContext(id) {
-      return (await database.query('SELECT id,customer_id FROM workify.projects WHERE id=$1', [id]))
-        .rows[0];
-    },
+    // метод получения идентификатора проекта и его заказчика
+    projectContext: (id) =>
+      database.projects.findUnique({ where: { id }, select: { id: true, customer_id: true } }),
 
+    // метод блокировки аккаунтов участников в порядке UUID и чтения их текущих данных
     async lockUsers(ids) {
-      return (
-        await database.query(
-          'SELECT id,role,status,blocked_until FROM workify.users WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',
-          [[...new Set(ids)]],
-        )
-      ).rows;
+      const locked = await lockRows(database, 'users', ids);
+
+      return database.users.findMany({ where: { id: { in: locked } }, orderBy: { id: 'asc' } });
     },
 
+    // метод блокировки и повторного чтения проекта в текущей транзакции
     async lockProject(id) {
-      return (await database.query('SELECT * FROM workify.projects WHERE id=$1 FOR UPDATE', [id]))
-        .rows[0];
+      await lockRows(database, 'projects', [id]);
+
+      return plain(await database.projects.findUnique({ where: { id } }));
     },
 
     audit: createAuditRepository(database).audit,

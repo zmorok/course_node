@@ -1,92 +1,123 @@
+import { databaseNow, date, plain, blockingStatuses } from './database-tools.js';
+
 export function createAssignmentRepository(database) {
+  // создание заказа со снимком условий проекта и данными принятого предложения
   async function create(project, source, column) {
     return (
-      await database.query(
-        `INSERT INTO workify.orders (project_id,customer_id,freelancer_id,${column},title_snapshot,description_snapshot,agreed_price,initial_deadline_at,deadline_at)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8) RETURNING id`,
-        [
-          project.id,
-          project.customer_id,
-          source.freelancer_id,
-          source.id,
-          project.title,
-          project.description,
-          source.offered_price,
-          source.offered_deadline_at,
-        ],
-      )
-    ).rows[0].id;
+      await database.orders.create({
+        data: {
+          project_id: project.id,
+          customer_id: project.customer_id,
+          freelancer_id: source.freelancer_id,
+          [column]: source.id,
+          title_snapshot: project.title,
+          description_snapshot: project.description,
+          agreed_price: source.offered_price,
+          initial_deadline_at: date(source.offered_deadline_at),
+          deadline_at: date(source.offered_deadline_at),
+        },
+      })
+    ).id;
   }
 
   return {
+    // метод проверки наличия активного или завершённого заказа по проекту
     async blockingOrder(projectId) {
-      return (
-        (
-          await database.query(
-            "SELECT 1 FROM workify.orders WHERE project_id=$1 AND status IN ('IN_PROGRESS','SUBMITTED','REVISION_REQUESTED','COMPLETED') LIMIT 1",
-            [projectId],
-          )
-        ).rowCount > 0
+      return Boolean(
+        await database.orders.findFirst({
+          where: { project_id: projectId, status: { in: blockingStatuses } },
+          select: { id: true },
+        }),
       );
     },
 
-    createFromProposal: (project, proposal) => create(project, proposal, 'proposal_id'),
+    // метод создания заказа на основе принятого отклика
+    createFromProposal: (project, source) => create(project, source, 'proposal_id'),
 
-    createFromInvitation: (project, invitation) => create(project, invitation, 'invitation_id'),
+    // метод создания заказа на основе принятого приглашения
+    createFromInvitation: (project, source) => create(project, source, 'invitation_id'),
 
+    // метод копирования связей вложений проекта в снимок заказа
     async copyFiles(projectId, orderId) {
-      await database.query(
-        'INSERT INTO workify.order_files (order_id,file_id) SELECT $2,file_id FROM workify.project_files WHERE project_id=$1',
-        [projectId, orderId],
-      );
+      const rows = await database.project_files.findMany({ where: { project_id: projectId } });
+
+      if (rows.length)
+        await database.order_files.createMany({
+          data: rows.map((row) => ({ order_id: orderId, file_id: row.file_id })),
+        });
     },
 
-    async startProject(projectId) {
-      await database.query("UPDATE workify.projects SET status='IN_PROGRESS' WHERE id=$1", [
-        projectId,
-      ]);
+    // метод перевода проекта в состояние выполнения
+    async startProject(id) {
+      await database.projects.updateMany({ where: { id }, data: { status: 'IN_PROGRESS' } });
     },
 
+    // метод отклонения остальных ожидающих откликов после назначения исполнителя
     async closeOtherProposals(projectId) {
-      return (
-        await database.query(
-          "UPDATE workify.proposals SET status='REJECTED',closure_reason='OTHER_SOURCE_ACCEPTED',decided_at=clock_timestamp() WHERE project_id=$1 AND status='PENDING' RETURNING *",
-          [projectId],
-        )
-      ).rows;
+      return plain(
+        await database.proposals.updateManyAndReturn({
+          where: { project_id: projectId, status: 'PENDING' },
+          data: {
+            status: 'REJECTED',
+            closure_reason: 'OTHER_SOURCE_ACCEPTED',
+            decided_at: await databaseNow(database),
+          },
+        }),
+      );
     },
 
+    // метод закрытия ожидающих приглашений с выбором причины завершения
     async closeInvitations(projectId) {
-      return (
-        await database.query(
-          `UPDATE workify.project_invitations SET status='EXPIRED',decided_at=clock_timestamp(),closure_reason=CASE
-        WHEN offered_deadline_at<=clock_timestamp() THEN 'TERMS_EXPIRED'
-        WHEN expires_at<=clock_timestamp() THEN 'TIME_EXPIRED' ELSE 'OTHER_SOURCE_ACCEPTED' END
-        WHERE project_id=$1 AND status='PENDING' RETURNING *`,
-          [projectId],
-        )
-      ).rows;
+      const now = await databaseNow(database);
+      const rows = [];
+
+      for (const [where, reason] of [
+        [{ offered_deadline_at: { lte: now } }, 'TERMS_EXPIRED'],
+        [{ expires_at: { lte: now } }, 'TIME_EXPIRED'],
+        [{}, 'OTHER_SOURCE_ACCEPTED'],
+      ])
+        rows.push(
+          ...(await database.project_invitations.updateManyAndReturn({
+            where: { project_id: projectId, status: 'PENDING', ...where },
+            data: { status: 'EXPIRED', closure_reason: reason, decided_at: now },
+          })),
+        );
+
+      return plain(rows);
     },
 
+    // метод сохранения события создания заказа в его истории
     async createdEvent(orderId, actorId) {
-      await database.query(
-        "INSERT INTO workify.order_events (order_id,actor_id,event_type) VALUES ($1,$2,'ORDER_CREATED')",
-        [orderId, actorId],
-      );
+      await database.order_events.create({
+        data: { order_id: orderId, actor_id: actorId, event_type: 'ORDER_CREATED' },
+      });
     },
 
+    // метод сохранения уведомления участнику о созданном заказе
     async notifyOrder(userId, projectId, orderId) {
-      await database.query(
-        "INSERT INTO workify.notifications (recipient_id,event_type,project_id,order_id,message) VALUES ($1,'ORDER_CREATED',$2,$3,'Создан заказ по согласованному предложению')",
-        [userId, projectId, orderId],
-      );
+      await database.notifications.create({
+        data: {
+          recipient_id: userId,
+          event_type: 'ORDER_CREATED',
+          project_id: projectId,
+          order_id: orderId,
+          message: 'Создан заказ по согласованному предложению',
+        },
+      });
     },
 
+    // метод сохранения уведомления исполнителю о закрытии приглашения
     async notifyInvitation(row) {
-      await database.query(
-        "INSERT INTO workify.notifications (recipient_id,event_type,project_id,invitation_id,message,metadata) VALUES ($1,'INVITATION_STATUS_CHANGED',$2,$3,'Приглашение закрыто',jsonb_build_object('status','EXPIRED','reason',$4::text))",
-        [row.freelancer_id, row.project_id, row.id, row.closure_reason],
-      );
+      await database.notifications.create({
+        data: {
+          recipient_id: row.freelancer_id,
+          event_type: 'INVITATION_STATUS_CHANGED',
+          project_id: row.project_id,
+          invitation_id: row.id,
+          message: 'Приглашение закрыто',
+          metadata: { status: 'EXPIRED', reason: row.closure_reason },
+        },
+      });
     },
   };
 }

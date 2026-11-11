@@ -6,6 +6,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { withTransaction } from '../../src/repositories/transaction.js';
+import { createPrismaClient } from '../../src/config/prisma.js';
 import { createAuthRepository } from '../../src/repositories/auth.repository.js';
 import { createAuthService } from '../../src/services/auth.service.js';
 import { createAccessTokens } from '../../src/utils/tokens.js';
@@ -60,11 +61,13 @@ export async function marketplace(
   } = {},
 ) {
   const directory = await mkdtemp(join(tmpdir(), 'workify-invitations-'));
+  const prisma = createPrismaClient(pool);
 
+  context.after(() => prisma.$disconnect());
   context.after(() => rm(directory, { recursive: true, force: true }));
 
   const tx = (op) =>
-    withTransaction(pool, (c) => {
+    withTransaction(prisma, (c) => {
       const assignments = createAssignmentRepository(c);
       const original = assignments.createdEvent;
 
@@ -95,58 +98,58 @@ export async function marketplace(
   }
 
   const authService = await createAuthService({
-    repository: createAuthRepository(pool),
+    repository: createAuthRepository(prisma),
     accessTokens: createAccessTokens(config.auth),
     sessionTtlDays: 30,
     transaction: (op) =>
-      withTransaction(pool, (c) => op(audited(createAuthRepository, c, failAuthAudit))),
+      withTransaction(prisma, (c) => op(audited(createAuthRepository, c, failAuthAudit))),
   });
 
   const fileService = createFileService({
-    repository: createFileRepository(pool),
+    repository: createFileRepository(prisma),
     storage: createLocalStorage(directory),
-    transaction: (op) => withTransaction(pool, (c) => op(createFileRepository(c))),
+    transaction: (op) => withTransaction(prisma, (c) => op(createFileRepository(c))),
   });
 
   const profileService = createProfileService({
-    repository: createProfileRepository(pool),
+    repository: createProfileRepository(prisma),
     transaction: (op) =>
-      withTransaction(pool, (c) => op(audited(createProfileRepository, c, failProfileAudit))),
+      withTransaction(prisma, (c) => op(audited(createProfileRepository, c, failProfileAudit))),
   });
 
   const projectService = createProjectService({
-    repository: createProjectRepository(pool),
+    repository: createProjectRepository(prisma),
     fileService,
     transaction: (op) =>
-      withTransaction(pool, (c) =>
+      withTransaction(prisma, (c) =>
         op(audited(createProjectRepository, c, failProjectAudit), createFileRepository(c)),
       ),
   });
 
   const proposalService = createProposalService({
-    repository: createProposalRepository(pool),
+    repository: createProposalRepository(prisma),
     assignmentService: createAssignmentService(),
     transaction: (op) => tx((c, a) => op(createProposalRepository(c), a)),
   });
 
   const invitationService = createInvitationService({
-    repository: createInvitationRepository(pool),
+    repository: createInvitationRepository(prisma),
     assignmentService: createAssignmentService(),
     transaction: (op) =>
       tx((c, a) => op(createInvitationRepository(c), a, createProposalRepository(c))),
   });
 
   const freelancerService = createFreelancerService({
-    repository: createFreelancerRepository(pool),
+    repository: createFreelancerRepository(prisma),
   });
-  const orderService = createOrderService({ repository: createOrderRepository(pool) });
+  const orderService = createOrderService({ repository: createOrderRepository(prisma) });
 
   const orderWorkService = createOrderWorkService({
-    repository: createOrderWorkRepository(pool),
-    orders: createOrderRepository(pool),
+    repository: createOrderWorkRepository(prisma),
+    orders: createOrderRepository(prisma),
     fileService,
     transaction: (op) =>
-      withTransaction(pool, (c) => {
+      withTransaction(prisma, (c) => {
         const repo = createOrderWorkRepository(c);
         const event = repo.event;
 
@@ -163,9 +166,9 @@ export async function marketplace(
   });
 
   const reviewService = createReviewService({
-    repository: createReviewRepository(pool),
+    repository: createReviewRepository(prisma),
     transaction: (op) =>
-      withTransaction(pool, (c) => {
+      withTransaction(prisma, (c) => {
         const repo = createReviewRepository(c);
         const audit = repo.audit;
 
@@ -182,10 +185,10 @@ export async function marketplace(
   });
 
   const complaintService = createComplaintService({
-    repository: createComplaintRepository(pool),
+    repository: createComplaintRepository(prisma),
     fileService,
     transaction: (op) =>
-      withTransaction(pool, (c) => {
+      withTransaction(prisma, (c) => {
         const repo = createComplaintRepository(c);
         const audit = repo.audit;
 
@@ -202,9 +205,9 @@ export async function marketplace(
   });
 
   const warningService = createWarningService({
-    repository: createWarningRepository(pool),
+    repository: createWarningRepository(prisma),
     transaction: (op) =>
-      withTransaction(pool, (c) => {
+      withTransaction(prisma, (c) => {
         const repo = createWarningRepository(c);
         const audit = repo.audit;
 
@@ -221,9 +224,9 @@ export async function marketplace(
   });
 
   const adminService = createAdminService({
-    repository: createAdminRepository(pool),
+    repository: createAdminRepository(prisma),
     transaction: (op) =>
-      withTransaction(pool, (c) => {
+      withTransaction(prisma, (c) => {
         const repo = createAdminRepository(c);
         const audit = repo.audit;
 
@@ -240,12 +243,12 @@ export async function marketplace(
   });
 
   const notificationService = createNotificationService({
-    repository: createNotificationRepository(pool),
+    repository: createNotificationRepository(prisma),
   });
 
   const auditService = createAuditService({
-    repository: createAuditRepository(pool),
-    transaction: (op) => withTransaction(pool, (client) => op(createAuditRepository(client))),
+    repository: createAuditRepository(prisma),
+    transaction: (op) => withTransaction(prisma, (client) => op(createAuditRepository(client))),
   });
 
   const app = await startApp(

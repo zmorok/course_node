@@ -1,105 +1,124 @@
 import { createSourceRepository } from './source.repository.js';
+import {
+  databaseNow,
+  lockRows,
+  page,
+  newest,
+  replaceLinks,
+  fileInclude,
+  userInclude,
+  plain,
+} from './database-tools.js';
 
-const columns = `c.*,o.title_snapshot,o.status AS order_status,tp.first_name AS target_first_name,tp.last_name AS target_last_name,
-  COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'original_name',f.original_name,'mime_type',f.mime_type,'size_bytes',f.size_bytes,'sha256',f.sha256,'created_at',f.created_at) ORDER BY cf.created_at,f.id)
-  FROM workify.complaint_files cf JOIN workify.stored_files f ON f.id=cf.file_id AND f.deleted_at IS NULL WHERE cf.complaint_id=c.id),'[]'::jsonb) AS files`;
-const joins = `JOIN workify.orders o ON o.id=c.order_id JOIN workify.profiles tp ON tp.user_id=c.target_id`;
+const include = {
+  order: true,
+  target: userInclude,
+  files: { ...fileInclude, orderBy: [{ created_at: 'asc' }, { file_id: 'asc' }] },
+};
+
+const flatten = ({ order, target, files, ...row }) => ({
+  ...row,
+  title_snapshot: order.title_snapshot,
+  order_status: order.status,
+  target_first_name: target.profile.first_name,
+  target_last_name: target.profile.last_name,
+  files: files.map((link) => plain(link.file)),
+});
 
 export function createComplaintRepository(database) {
+  // получение жалобы с заказом, данными адресата и вложениями по заданным условиям
+  async function own(where) {
+    const row = await database.complaints.findFirst({ where, include });
+
+    return row ? flatten(row) : undefined;
+  }
+
   return {
     ...createSourceRepository(database),
-    async context(id) {
-      return (await database.query('SELECT * FROM workify.orders WHERE id=$1', [id])).rows[0];
-    },
 
+    // метод получения заказа для определения участников при подаче жалобы
+    context: (id) => database.orders.findUnique({ where: { id } }),
+
+    // метод блокировки и повторного чтения заказа в текущей транзакции
     async lockOrder(id) {
-      return (await database.query('SELECT * FROM workify.orders WHERE id=$1 FOR UPDATE', [id]))
-        .rows[0];
+      await lockRows(database, 'orders', [id]);
+
+      return database.orders.findUnique({ where: { id } });
     },
 
-    async ownForOrder(orderId, actorId) {
-      return (
-        await database.query(
-          `SELECT ${columns} FROM workify.complaints c ${joins} WHERE c.order_id=$1 AND c.reporter_id=$2`,
-          [orderId, actorId],
-        )
-      ).rows[0];
-    },
+    // метод получения жалобы текущего заявителя по конкретному заказу
+    ownForOrder: (id, actorId) => own({ order_id: id, reporter_id: actorId }),
 
-    async own(id, actorId) {
-      return (
-        await database.query(
-          `SELECT ${columns} FROM workify.complaints c ${joins} WHERE c.id=$1 AND c.reporter_id=$2`,
-          [id, actorId],
-        )
-      ).rows[0];
-    },
+    // метод получения жалобы по идентификатору и её заявителю
+    own: (id, actorId) => own({ id, reporter_id: actorId }),
 
+    // метод получения жалоб заявителя по его режиму участия и статусу
     async list(actorId, query) {
-      const mode = query.mode === 'customer' ? 'customer_id' : 'freelancer_id';
+      const result = await page(database, 'complaints', query, {
+        where: {
+          reporter_id: actorId,
+          [query.mode === 'customer' ? 'customer_id' : 'freelancer_id']: actorId,
+          status: query.status,
+        },
+        include,
+        orderBy: newest,
+      });
 
-      return (
-        await database.query(
-          `WITH matches AS (SELECT ${columns} FROM workify.complaints c ${joins} WHERE c.reporter_id=$1 AND c.${mode}=$1 AND ($2::text IS NULL OR c.status=$2)),
-    page AS (SELECT * FROM matches ORDER BY created_at DESC,id DESC LIMIT $3 OFFSET $4)
-    SELECT (SELECT count(*) FROM matches)::int AS total,COALESCE((SELECT jsonb_agg(page ORDER BY created_at DESC,id DESC) FROM page),'[]'::jsonb) AS items`,
-          [actorId, query.status ?? null, query.pageSize, (query.page - 1) * query.pageSize],
-        )
-      ).rows[0];
+      return { ...result, items: result.items.map(flatten) };
     },
 
+    // метод создания жалобы с сохранением участников заказа и определением второй стороны
     async create(order, actorId, input) {
-      const target = actorId === order.customer_id ? order.freelancer_id : order.customer_id;
+      const now = await databaseNow(database);
 
       return (
-        await database.query(
-          `INSERT INTO workify.complaints(order_id,customer_id,freelancer_id,reporter_id,target_id,reason,description,created_at,updated_at)
-    VALUES($1,$2,$3,$4,$5,$6,$7,statement_timestamp(),statement_timestamp()) RETURNING id`,
-          [
-            order.id,
-            order.customer_id,
-            order.freelancer_id,
-            actorId,
-            target,
-            input.reason,
-            input.description,
-          ],
-        )
-      ).rows[0].id;
+        await database.complaints.create({
+          data: {
+            order_id: order.id,
+            customer_id: order.customer_id,
+            freelancer_id: order.freelancer_id,
+            reporter_id: actorId,
+            target_id: actorId === order.customer_id ? order.freelancer_id : order.customer_id,
+            reason: input.reason,
+            description: input.description,
+            created_at: now,
+            updated_at: now,
+          },
+        })
+      ).id;
     },
 
+    // метод блокировки и чтения жалобы, принадлежащей текущему заявителю
     async lockOwn(id, actorId) {
-      return (
-        await database.query(
-          'SELECT * FROM workify.complaints WHERE id=$1 AND reporter_id=$2 FOR UPDATE',
-          [id, actorId],
-        )
-      ).rows[0];
+      await lockRows(database, 'complaints', [id]);
+
+      return database.complaints.findFirst({ where: { id, reporter_id: actorId } });
     },
 
+    // метод изменения причины и описания жалобы
     async update(id, input) {
-      await database.query('UPDATE workify.complaints SET reason=$2,description=$3 WHERE id=$1', [
-        id,
-        input.reason,
-        input.description,
-      ]);
+      await database.complaints.updateMany({
+        where: { id },
+        data: { reason: input.reason, description: input.description },
+      });
     },
 
+    // метод удаления связей жалобы с её вложениями
     async detach(id) {
-      await database.query('DELETE FROM workify.complaint_files WHERE complaint_id=$1', [id]);
+      await database.complaint_files.deleteMany({ where: { complaint_id: id } });
     },
 
+    // метод удаления записи жалобы из базы
     async remove(id) {
-      await database.query('DELETE FROM workify.complaints WHERE id=$1', [id]);
+      await database.complaints.deleteMany({ where: { id } });
     },
 
-    async attach(id, fileIds) {
-      if (fileIds.length) {
-        await database.query(
-          'INSERT INTO workify.complaint_files(complaint_id,file_id) SELECT $1,unnest($2::uuid[])',
-          [id, fileIds],
-        );
-      }
+    // метод сохранения связей жалобы с выбранными файлами
+    async attach(id, ids) {
+      if (ids.length)
+        await database.complaint_files.createMany({
+          data: ids.map((fileId) => ({ complaint_id: id, file_id: fileId })),
+        });
     },
   };
 }

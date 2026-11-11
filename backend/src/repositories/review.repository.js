@@ -1,123 +1,183 @@
+import { Prisma } from '@prisma/client';
 import { createFileRepository } from './file.repository.js';
 import { createSourceRepository } from './source.repository.js';
+import {
+  databaseNow,
+  lockRows,
+  plain,
+  page,
+  newest,
+  oldest,
+  replaceLinks,
+  fileInclude,
+  fileData,
+  userInclude,
+} from './database-tools.js';
 
-const columns = `COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'originalName',f.original_name,'mimeType',f.mime_type,'sizeBytes',f.size_bytes) ORDER BY f.id) FROM workify.review_files rf JOIN workify.stored_files f ON f.id=rf.file_id WHERE rf.review_id=r.id AND f.deleted_at IS NULL),'[]'::jsonb) AS files,r.id,r.order_id,r.author_id,r.recipient_id,r.rating,r.text,r.deleted_at,r.created_at,r.updated_at,o.title_snapshot,o.status AS order_status,o.customer_id,o.freelancer_id,
-  ap.first_name AS author_first_name,ap.last_name AS author_last_name,rp.first_name AS recipient_first_name,rp.last_name AS recipient_last_name`;
-const joins = `JOIN workify.orders o ON o.id=r.order_id JOIN workify.profiles ap ON ap.user_id=r.author_id JOIN workify.profiles rp ON rp.user_id=r.recipient_id`;
-const modes = { customer: 'customer_id', freelancer: 'freelancer_id' };
+const include = {
+  order: true,
+  author: userInclude,
+  recipient: userInclude,
+  files: { ...fileInclude, orderBy: { file_id: 'asc' } },
+};
+
+const flatten = ({ order, author, recipient, files, ...row }) => ({
+  ...plain(row),
+  title_snapshot: order.title_snapshot,
+  order_status: order.status,
+  customer_id: order.customer_id,
+  freelancer_id: order.freelancer_id,
+  author_first_name: author.profile.first_name,
+  author_last_name: author.profile.last_name,
+  recipient_first_name: recipient.profile.first_name,
+  recipient_last_name: recipient.profile.last_name,
+  files: files.map((link) => {
+    const { createdAt, ...file } = fileData(link);
+
+    return file;
+  }),
+});
 
 export function createReviewRepository(database) {
-  async function list(query, { actorId, userId } = {}) {
-    const isPublic = Boolean(userId);
-    const written = !isPublic && query.direction === 'written';
-    const values = [userId ?? actorId, query.pageSize, (query.page - 1) * query.pageSize];
-    const where = isPublic
-      ? `r.recipient_id=$1 AND r.recipient_id=o.${modes[query.mode]} AND EXISTS(SELECT 1 FROM workify.v_public_profiles p WHERE p.user_id=$1)`
-      : `o.${modes[query.mode]}=$1 AND r.${written ? 'author_id' : 'recipient_id'}=$1`;
-
-    return (
-      await database.query(
-        `WITH matches AS (SELECT ${columns} FROM workify.reviews r ${joins} WHERE ${where} AND o.status IN ('COMPLETED','CANCELLED') ${written ? '' : 'AND r.deleted_at IS NULL'}),
-      page AS (SELECT * FROM matches ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $3)
-      SELECT (SELECT count(*) FROM matches)::int AS total,(SELECT round(avg(rating) FILTER(WHERE deleted_at IS NULL),2)::text FROM matches) AS rating,
-      (SELECT count(*) FROM matches WHERE deleted_at IS NULL)::int AS "visibleCount",
-      ${isPublic ? 'EXISTS(SELECT 1 FROM workify.v_public_profiles p WHERE p.user_id=$1)' : 'true'} AS available,
-      COALESCE((SELECT jsonb_agg(page ORDER BY created_at DESC,id DESC) FROM page),'[]'::jsonb) AS items`,
-        values,
-      )
-    ).rows[0];
-  }
-
   return {
     ...createSourceRepository(database),
-    list,
     files: createFileRepository(database),
-    async replaceFiles(id, ids) {
-      await database.query('DELETE FROM workify.review_files WHERE review_id=$1', [id]);
-      await database.query(
-        'INSERT INTO workify.review_files(review_id,file_id) SELECT $1,unnest($2::uuid[])',
-        [id, ids],
-      );
+
+    // метод получения личных или публичных отзывов с количеством видимых записей и средней оценкой
+    async list(query, { actorId, userId } = {}) {
+      const isPublic = Boolean(userId),
+        written = !isPublic && query.direction === 'written',
+        mode = query.mode === 'customer' ? 'customer_id' : 'freelancer_id';
+      const available =
+        !isPublic ||
+        Boolean(
+          await database.v_public_profiles.findUnique({
+            where: { user_id: userId },
+            select: { user_id: true },
+          }),
+        );
+      const where = {
+        ...(isPublic
+          ? { recipient_id: userId, [mode]: userId }
+          : { [mode]: actorId, [written ? 'author_id' : 'recipient_id']: actorId }),
+        order: { status: { in: ['COMPLETED', 'CANCELLED'] } },
+        ...(!written ? { deleted_at: null } : {}),
+        ...(!available ? { id: { in: [] } } : {}),
+      };
+      const result = await page(database, 'reviews', query, { where, include, orderBy: newest });
+      const visible = await database.reviews.aggregate({
+        where: { ...where, deleted_at: null },
+        _sum: { rating: true },
+        _count: { id: true },
+      });
+      const count = visible._count.id;
+
+      return {
+        ...result,
+        items: result.items.map(flatten),
+        available,
+        rating: count ? new Prisma.Decimal(visible._sum.rating).div(count).toFixed(2) : null,
+        visibleCount: count,
+      };
     },
 
-    async orderContext(id) {
-      return (await database.query('SELECT * FROM workify.orders WHERE id=$1', [id])).rows[0];
-    },
+    // метод полной замены связей отзыва с изображениями
+    replaceFiles: (id, ids) =>
+      replaceLinks(database, 'review_files', 'review_id', id, 'file_id', ids),
 
+    // метод получения заказа для определения участников и доступности отзывов
+    orderContext: (id) => database.orders.findUnique({ where: { id } }),
+
+    // метод блокировки и повторного чтения заказа перед изменением отзывов
     async lockOrder(id) {
-      return (await database.query('SELECT * FROM workify.orders WHERE id=$1 FOR UPDATE', [id]))
-        .rows[0];
+      await lockRows(database, 'orders', [id]);
+
+      return database.orders.findUnique({ where: { id } });
     },
 
+    // метод получения автора отзыва, заказа, проекта и участников сделки
     async context(id) {
-      return (
-        await database.query(
-          'SELECT r.id,r.author_id,r.order_id,o.project_id,o.customer_id,o.freelancer_id FROM workify.reviews r JOIN workify.orders o ON o.id=r.order_id WHERE r.id=$1',
-          [id],
-        )
-      ).rows[0];
+      const row = await database.reviews.findUnique({ where: { id }, include: { order: true } });
+
+      return row
+        ? {
+            id: row.id,
+            author_id: row.author_id,
+            order_id: row.order_id,
+            project_id: row.order.project_id,
+            customer_id: row.order.customer_id,
+            freelancer_id: row.order.freelancer_id,
+          }
+        : undefined;
     },
 
+    // метод поиска и блокировки отзыва текущего автора по заказу
     async lockOwn(orderId, actorId) {
-      return (
-        await database.query(
-          'SELECT * FROM workify.reviews WHERE order_id=$1 AND author_id=$2 FOR UPDATE',
-          [orderId, actorId],
-        )
-      ).rows[0];
+      const row = await database.reviews.findFirst({
+        where: { order_id: orderId, author_id: actorId },
+      });
+
+      if (!row) return undefined;
+
+      await lockRows(database, 'reviews', [row.id]);
+
+      return database.reviews.findUnique({ where: { id: row.id } });
     },
 
+    // метод получения отзыва с участниками, заказом и изображениями
     async find(id) {
-      return (
-        await database.query(`SELECT ${columns} FROM workify.reviews r ${joins} WHERE r.id=$1`, [
-          id,
-        ])
-      ).rows[0];
+      const row = await database.reviews.findUnique({ where: { id }, include });
+
+      return row ? flatten(row) : undefined;
     },
 
+    // метод получения всех отзывов по заказу, включая скрытые записи
     async forOrder(orderId) {
       return (
-        await database.query(
-          `SELECT ${columns} FROM workify.reviews r ${joins} WHERE r.order_id=$1 ORDER BY r.created_at,r.id`,
-          [orderId],
-        )
-      ).rows;
+        await database.reviews.findMany({ where: { order_id: orderId }, include, orderBy: oldest })
+      ).map(flatten);
     },
 
+    // метод сохранения отзыва с автором, адресатом и участниками исходного заказа
     async create(order, actorId, recipientId, input) {
+      const now = await databaseNow(database);
+
       return (
-        await database.query(
-          `INSERT INTO workify.reviews(order_id,customer_id,freelancer_id,author_id,recipient_id,rating,text,created_at,updated_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,statement_timestamp(),statement_timestamp()) RETURNING id`,
-          [
-            order.id,
-            order.customer_id,
-            order.freelancer_id,
-            actorId,
-            recipientId,
-            input.rating,
-            input.text,
-          ],
-        )
-      ).rows[0].id;
+        await database.reviews.create({
+          data: {
+            order_id: order.id,
+            customer_id: order.customer_id,
+            freelancer_id: order.freelancer_id,
+            author_id: actorId,
+            recipient_id: recipientId,
+            rating: input.rating,
+            text: input.text,
+            created_at: now,
+            updated_at: now,
+          },
+        })
+      ).id;
     },
 
+    // метод изменения оценки и текста отзыва
     async update(id, input) {
-      await database.query('UPDATE workify.reviews SET rating=$2,text=$3 WHERE id=$1', [
-        id,
-        input.rating,
-        input.text,
-      ]);
+      await database.reviews.updateMany({
+        where: { id },
+        data: { rating: input.rating, text: input.text },
+      });
     },
 
+    // метод пометки отзыва как скрытого с сохранением записи в базе
     async hide(id) {
-      await database.query('UPDATE workify.reviews SET deleted_at=clock_timestamp() WHERE id=$1', [
-        id,
-      ]);
+      await database.reviews.updateMany({
+        where: { id },
+        data: { deleted_at: await databaseNow(database) },
+      });
     },
 
+    // метод снятия отметки о скрытии отзыва
     async restore(id) {
-      await database.query('UPDATE workify.reviews SET deleted_at=NULL WHERE id=$1', [id]);
+      await database.reviews.updateMany({ where: { id }, data: { deleted_at: null } });
     },
   };
 }

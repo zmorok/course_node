@@ -60,12 +60,15 @@ test('audit filters reject invalid identities sort page dates and command fields
   }
   assert.equal(auditQuery({ actorId: randomUUID(), page: '2' }).page, 2);
 });
-test('central writer uses bound values and excludes secret snapshots before issuing SQL', async () => {
+test('central writer passes structured data to Prisma and excludes secret snapshots', async () => {
   let written;
 
   const repo = createAuditRepository({
-    query: async (sql, values) => {
-      written = { sql, values };
+    $queryRaw: async () => [{ now: new Date() }],
+    audit_logs: {
+      create: async ({ data }) => {
+        written = data;
+      },
     },
   });
 
@@ -77,9 +80,9 @@ test('central writer uses bound values and excludes secret snapshots before issu
     { safe: "x'); DROP TABLE users; --", refreshToken: 'hidden' },
     { oldData: { passwordHash: 'hidden', name: 'Before' }, newData: { name: 'After' } },
   );
-  assert.match(written.sql, /\$9|clock_timestamp/);
-  assert(written.values[4].includes('DROP TABLE'));
-  assert(!written.sql.includes('DROP TABLE'));
-  assert(!JSON.stringify(written.values).includes('hidden'));
+  assert(written.metadata.safe.includes('DROP TABLE'));
+  assert.deepEqual(written.old_data, { name: 'Before' });
+  assert.deepEqual(written.new_data, { name: 'After' });
+  assert(!JSON.stringify(written).includes('hidden'));
   await assert.rejects(repo.audit(null, 'TEST', 'user', null, []), TypeError);
 });

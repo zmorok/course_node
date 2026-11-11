@@ -1,10 +1,11 @@
+import { withTransaction } from '../../src/repositories/transaction.js';
+import { createPrismaClient } from '../../src/config/prisma.js';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { loadConfig } from '../../src/config/env.js';
 import { createDatabasePool } from '../../src/config/database.js';
 import { createAuthRepository } from '../../src/repositories/auth.repository.js';
-import { withTransaction } from '../../src/repositories/transaction.js';
 import { createAuthService } from '../../src/services/auth.service.js';
 import { createAccessTokens, hashRefreshToken } from '../../src/utils/tokens.js';
 import { createApiRouter } from '../../src/routes/index.js';
@@ -16,9 +17,13 @@ if (process.env.WORKIFY_DB_TESTS !== '1') {
 
 const config = loadConfig({ ...process.env, NODE_ENV: 'test' });
 const pool = createDatabasePool(config.database);
+const prisma = createPrismaClient(pool);
 const owned = [];
 // Immutable audit keeps its actors until the disposable database is removed.
-after(() => pool.end());
+after(async () => {
+  await prisma.$disconnect();
+  await pool.end();
+});
 
 const post = (body) => ({
   method: 'POST',
@@ -51,9 +56,9 @@ function newAccount() {
 
 async function setup(context) {
   const service = await createAuthService({
-    repository: createAuthRepository(pool),
+    repository: createAuthRepository(prisma),
     transaction: (operation) =>
-      withTransaction(pool, (client) => operation(createAuthRepository(client))),
+      withTransaction(prisma, (client) => operation(createAuthRepository(client))),
     accessTokens: createAccessTokens(config.auth),
     sessionTtlDays: config.auth.sessionTtlDays,
   });

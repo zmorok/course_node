@@ -1,9 +1,10 @@
 export function createHealthRepository(database) {
   return {
+    // метод проверки доступности базы через чтение модели аккаунтов
     async ping() {
-      const result = await database.query('SELECT 1 AS ready');
+      await database.users.findFirst({ select: { id: true } });
 
-      return result.rows[0]?.ready === 1;
+      return true;
     },
   };
 }

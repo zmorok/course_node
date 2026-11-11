@@ -1,3 +1,4 @@
+import { createPrismaClient } from '../../src/config/prisma.js';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -11,8 +12,12 @@ if (process.env.WORKIFY_DB_TESTS !== '1') {
 }
 
 const pool = createDatabasePool(loadConfig({ ...process.env, NODE_ENV: 'test' }).database);
+const prisma = createPrismaClient(pool);
 
-after(() => pool.end());
+after(async () => {
+  await prisma.$disconnect();
+  await pool.end();
+});
 
 async function setup(context, options) {
   const app = await marketplace(
@@ -413,7 +418,7 @@ test('warning history preserves complaint linkage expiry and separate sanctions 
     "UPDATE workify.complaints SET status='RESOLVED',assigned_admin_id=$2,claimed_at=clock_timestamp(),resolved_at=clock_timestamp(),resolution_note='Подтверждено' WHERE id=$1",
     [complaint.id, admin.id],
   );
-  await createWarningRepository(pool).create(
+  await createWarningRepository(prisma).create(
     admin.id,
     app.a.id,
     { message: 'Связанное предупреждение', expiresAt: future(1) },

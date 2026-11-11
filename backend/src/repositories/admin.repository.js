@@ -4,26 +4,32 @@ import { createOrderRepository } from './order.repository.js';
 import { createOrderWorkRepository } from './order-work.repository.js';
 import { createComplaintRepository } from './complaint.repository.js';
 import { createWarningRepository } from './warning.repository.js';
+import {
+  databaseNow,
+  lockRows,
+  plain,
+  page,
+  newest,
+  oldest,
+  date,
+  contains,
+  userInclude,
+  fileInclude,
+} from './database-tools.js';
 
-const userColumns = `u.id,u.email,u.username,u.role,CASE WHEN u.status='BLOCKED' AND (u.blocked_until IS NULL OR u.blocked_until>statement_timestamp()) THEN 'BLOCKED' ELSE 'ACTIVE' END AS status,
-  u.blocked_by,u.blocked_at,u.blocked_until,u.block_reason,u.last_unblocked_at,u.deleted_at,u.last_online_at,u.created_at,p.middle_name,p.gender,p.city,p.country,p.description,p.first_name,p.last_name,p.headline,p.phone`;
-const complaintColumns = `c.id,c.order_id,c.reporter_id,c.target_id,c.status,c.reason,c.assigned_admin_id,c.created_at,c.claimed_at,c.resolved_at,
-  o.title_snapshot,o.project_id,ru.username AS reporter_username,tu.username AS target_username`;
-const complaintJoins = `JOIN workify.orders o ON o.id=c.order_id JOIN workify.projects p ON p.id=o.project_id JOIN workify.users ru ON ru.id=c.reporter_id JOIN workify.users tu ON tu.id=c.target_id`;
+const textCompare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+
+const userData = ({ profile, ...row }, now) => ({
+  ...row,
+  ...profile,
+  id: row.id,
+  status:
+    row.status === 'BLOCKED' && (!row.blocked_until || row.blocked_until > now)
+      ? 'BLOCKED'
+      : 'ACTIVE',
+});
 
 export function createAdminRepository(database) {
-  async function page(select, from, where, values, query, sort) {
-    values.push(query.pageSize, (query.page - 1) * query.pageSize);
-
-    return (
-      await database.query(
-        `WITH matches AS (SELECT ${select} FROM ${from}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}),
-    page AS (SELECT * FROM matches ORDER BY ${sort} LIMIT $${values.length - 1} OFFSET $${values.length}) SELECT (SELECT count(*) FROM matches)::int AS total,COALESCE((SELECT jsonb_agg(page ORDER BY ${sort}) FROM page),'[]'::jsonb) AS items`,
-        values,
-      )
-    ).rows[0];
-  }
-
   return {
     ...createSourceRepository(database),
     ...createAdminAccountsRepository(database),
@@ -31,228 +37,311 @@ export function createAdminRepository(database) {
     work: createOrderWorkRepository(database),
     complaints: createComplaintRepository(database),
     warnings: createWarningRepository(database),
-    async lockUsers(ids) {
-      return (
-        await database.query(
-          'SELECT id,role,status,deleted_at,blocked_by,blocked_at,blocked_until,block_reason,last_unblocked_at FROM workify.users WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE',
-          [[...new Set(ids)]],
-        )
-      ).rows;
-    },
 
+    // метод поиска неудалённых пользователей с фильтрами и пагинацией
     async users(query) {
-      const values = [];
-      const where = ['u.deleted_at IS NULL'];
+      const now = await databaseNow(database),
+        where = { deleted_at: null, role: query.role };
 
-      const bind = (value) => {
-        values.push(value);
+      if (query.status === 'BLOCKED')
+        Object.assign(where, {
+          status: 'BLOCKED',
+          OR: [{ blocked_until: null }, { blocked_until: { gt: now } }],
+        });
 
-        return `$${values.length}`;
-      };
+      if (query.status === 'ACTIVE')
+        where.OR = [{ status: 'ACTIVE' }, { blocked_until: { lte: now } }];
 
-      if (query.search) {
-        where.push(
-          `strpos(lower(concat_ws(' ',u.username,u.email,p.first_name,p.last_name)),lower(${bind(query.search)}))>0`,
-        );
+      const options = { where, include: { profile: true }, orderBy: newest };
+
+      if (query.search || query.sort === 'name') {
+        let rows = (await database.users.findMany(options)).map((row) => userData(row, now));
+
+        if (query.search)
+          rows = rows.filter((row) =>
+            [row.username, row.email, row.first_name, row.last_name]
+              .join(' ')
+              .toLowerCase()
+              .includes(query.search.toLowerCase()),
+          );
+
+        if (query.sort === 'name')
+          rows.sort(
+            (a, b) =>
+              textCompare(a.last_name.toLowerCase(), b.last_name.toLowerCase()) ||
+              textCompare(a.first_name.toLowerCase(), b.first_name.toLowerCase()) ||
+              textCompare(a.id, b.id),
+          );
+
+        return {
+          total: rows.length,
+          items: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
+        };
       }
 
-      if (query.role) {
-        where.push(`u.role=${bind(query.role)}`);
-      }
+      const result = await page(database, 'users', query, options);
 
-      if (query.status) {
-        where.push(
-          `(CASE WHEN u.status='BLOCKED' AND (u.blocked_until IS NULL OR u.blocked_until>statement_timestamp()) THEN 'BLOCKED' ELSE 'ACTIVE' END)=${bind(query.status)}`,
-        );
-      }
-
-      return page(
-        userColumns,
-        'workify.users u JOIN workify.profiles p ON p.user_id=u.id',
-        where,
-        values,
-        query,
-        query.sort === 'name' ? 'lower(last_name),lower(first_name),id' : 'created_at DESC,id DESC',
-      );
+      return { ...result, items: result.items.map((row) => userData(row, now)) };
     },
 
+    // метод получения аккаунта с профилем, рейтингами и актуальным состоянием блокировки
     async user(id) {
-      return (
-        await database.query(
-          `SELECT ${userColumns},r.customer_rating,r.freelancer_rating,r.customer_review_count,r.freelancer_review_count FROM workify.users u JOIN workify.profiles p ON p.user_id=u.id LEFT JOIN workify.v_user_ratings r ON r.user_id=u.id WHERE u.id=$1`,
-          [id],
-        )
-      ).rows[0];
-    },
+      const row = await database.users.findUnique({ where: { id }, include: { profile: true } });
 
-    async sanctions(id, query) {
-      return page(
-        `a.id,a.complaint_id,a.action_type,a.reason,a.created_at,a.expires_at,p.first_name,p.last_name,
-      ((a.action_type='WARNING' OR a.created_at>COALESCE(u.last_unblocked_at,'-infinity'::timestamptz)) AND (a.expires_at IS NULL OR a.expires_at>statement_timestamp())) AS current`,
-        'workify.moderation_actions a JOIN workify.users u ON u.id=a.target_id JOIN workify.profiles p ON p.user_id=a.admin_id',
-        ['a.target_id=$1'],
-        [id],
-        query,
-        'created_at DESC,id DESC',
-      );
-    },
+      if (!row?.profile) return undefined;
 
-    async queue(actorId, query) {
-      const values = [];
-      const where = [];
+      const rating = plain(await database.v_user_ratings.findUnique({ where: { user_id: id } }));
 
-      const bind = (value) => {
-        values.push(value);
-
-        return `$${values.length}`;
+      return {
+        ...userData(row, await databaseNow(database)),
+        customer_rating: rating?.customer_rating ?? null,
+        freelancer_rating: rating?.freelancer_rating ?? null,
+        customer_review_count: rating?.customer_review_count ?? null,
+        freelancer_review_count: rating?.freelancer_review_count ?? null,
       };
+    },
 
-      for (const [key, column] of [
-        ['id', 'c.id'],
-        ['status', 'c.status'],
-        ['orderId', 'c.order_id'],
-        ['projectId', 'o.project_id'],
-        ['categoryId', 'p.category_id'],
-        ['assignedAdminId', 'c.assigned_admin_id'],
-      ]) {
-        if (query[key]) {
-          where.push(`${column}=${bind(query[key])}`);
-        }
-      }
-      for (const [key, column] of [
-        ['reporter', 'ru.username'],
-        ['target', 'tu.username'],
-        ['reason', 'c.reason'],
-      ]) {
-        if (query[key]) {
-          where.push(`strpos(lower(${column}),lower(${bind(query[key])}))>0`);
-        }
-      }
+    // метод получения истории санкций пользователя с признаком их актуальности
+    async sanctions(id, query) {
+      const result = await page(database, 'moderation_actions', query, {
+        where: { target_id: id },
+        include: { admin: userInclude, target: true },
+        orderBy: newest,
+      });
+      const now = await databaseNow(database);
 
-      if (query.userId) {
-        const arg = bind(query.userId);
+      return {
+        ...result,
+        items: result.items.map(({ admin, target, ...row }) => ({
+          ...row,
+          first_name: admin.profile.first_name,
+          last_name: admin.profile.last_name,
+          current:
+            (row.action_type === 'WARNING' ||
+              !target.last_unblocked_at ||
+              row.created_at > target.last_unblocked_at) &&
+            (!row.expires_at || row.expires_at > now),
+        })),
+      };
+    },
 
-        where.push(`(${arg} IN (c.reporter_id,c.target_id))`);
-      }
+    // метод получения очереди жалоб с фильтрами по заказу, участникам и назначению
+    async queue(actorId, query) {
+      const where = {};
 
-      if (query.assignment === 'mine') {
-        where.push(`c.assigned_admin_id=${bind(actorId)}`);
-      }
+      for (const [key, col] of Object.entries({
+        id: 'id',
+        status: 'status',
+        orderId: 'order_id',
+        assignedAdminId: 'assigned_admin_id',
+      }))
+        if (query[key]) where[col] = query[key];
 
-      if (query.assignment === 'unassigned') {
-        where.push('c.assigned_admin_id IS NULL');
-      }
+      if (query.projectId || query.categoryId)
+        where.order = { project: { id: query.projectId, category_id: query.categoryId } };
 
-      if (query.createdFrom) {
-        where.push(`c.created_at>=${bind(query.createdFrom)}`);
-      }
+      if (query.reporter) where.reporter = { username: contains(query.reporter) };
 
-      if (query.createdTo) {
-        where.push(`c.created_at<=${bind(query.createdTo)}`);
-      }
+      if (query.target) where.target = { username: contains(query.target) };
 
-      return page(
-        complaintColumns,
-        `workify.complaints c ${complaintJoins}`,
+      if (query.reason) where.reason = contains(query.reason);
+
+      if (query.userId) where.OR = [{ reporter_id: query.userId }, { target_id: query.userId }];
+
+      if (query.assignment === 'mine') where.AND = [{ assigned_admin_id: actorId }];
+
+      if (query.assignment === 'unassigned') where.AND = [{ assigned_admin_id: null }];
+
+      if (query.createdFrom || query.createdTo)
+        where.created_at = {
+          gte: query.createdFrom ? date(query.createdFrom) : undefined,
+          lte: query.createdTo ? date(query.createdTo) : undefined,
+        };
+
+      const result = await page(database, 'complaints', query, {
         where,
-        values,
-        query,
-        'created_at,id',
-      );
+        include: {
+          order: { select: { project_id: true, title_snapshot: true } },
+          reporter: { select: { username: true } },
+          target: { select: { username: true } },
+        },
+        orderBy: oldest,
+      });
+
+      return {
+        ...result,
+        items: result.items.map(({ order, reporter, target, ...row }) => ({
+          ...row,
+          title_snapshot: order.title_snapshot,
+          project_id: order.project_id,
+          reporter_username: reporter.username,
+          target_username: target.username,
+        })),
+      };
     },
 
+    // метод получения жалобы со связанным проектом и необязательной блокировкой строки
     async complaint(id, lock = false) {
-      return (
-        await database.query(
-          `SELECT c.*,o.project_id FROM workify.complaints c JOIN workify.orders o ON o.id=c.order_id WHERE c.id=$1${lock ? ' FOR UPDATE OF c' : ''}`,
-          [id],
-        )
-      ).rows[0];
+      if (lock) await lockRows(database, 'complaints', [id]);
+
+      const row = await database.complaints.findUnique({
+        where: { id },
+        include: { order: { select: { project_id: true } } },
+      });
+
+      if (!row) return undefined;
+
+      const { order, ...rest } = row;
+
+      return { ...rest, project_id: order.project_id };
     },
 
+    // метод получения проекта с категорией и доступными вложениями для рассмотрения жалобы
     async project(id) {
-      return (
-        await database.query(
-          `SELECT p.id,p.title,p.description,p.status,p.category_id,p.budget::text AS budget,p.desired_deadline_at,c.name AS category_name,
-      COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'originalName',f.original_name,'sizeBytes',f.size_bytes) ORDER BY f.id) FROM workify.project_files pf JOIN workify.stored_files f ON f.id=pf.file_id AND f.deleted_at IS NULL WHERE pf.project_id=p.id),'[]'::jsonb) AS files
-      FROM workify.projects p LEFT JOIN workify.categories c ON c.id=p.category_id WHERE p.id=$1`,
-          [id],
-        )
-      ).rows[0];
+      const row = await database.projects.findUnique({
+        where: { id },
+        include: { category: true, files: { ...fileInclude, orderBy: { file_id: 'asc' } } },
+      });
+
+      return row
+        ? {
+            id: row.id,
+            title: row.title,
+            description: row.description,
+            status: row.status,
+            category_id: row.category_id,
+            budget: plain(row.budget),
+            desired_deadline_at: row.desired_deadline_at,
+            category_name: row.category?.name ?? null,
+            files: row.files.map((link) => ({
+              id: link.file.id,
+              originalName: link.file.original_name,
+              sizeBytes: Number(link.file.size_bytes),
+            })),
+          }
+        : undefined;
     },
 
+    // метод получения исходного отклика или приглашения, по которому создан заказ
     async source(order) {
-      const table = order.proposal_id ? 'proposals' : 'project_invitations';
-      const id = order.proposal_id ?? order.invitation_id;
+      const row = await database[
+        order.proposal_id ? 'proposals' : 'project_invitations'
+      ].findUnique({ where: { id: order.proposal_id ?? order.invitation_id } });
 
-      return (
-        await database.query(
-          `SELECT id,message,offered_price::text AS price,offered_deadline_at,status,created_at,decided_at FROM workify.${table} WHERE id=$1`,
-          [id],
-        )
-      ).rows[0];
+      return row
+        ? {
+            id: row.id,
+            message: row.message,
+            price: plain(row.offered_price),
+            offered_deadline_at: row.offered_deadline_at,
+            status: row.status,
+            created_at: row.created_at,
+            decided_at: row.decided_at,
+          }
+        : undefined;
     },
 
-    async reviews(id, query) {
-      return page(
-        'r.id,r.author_id,r.recipient_id,r.rating,r.text,r.deleted_at,r.created_at',
-        'workify.reviews r',
-        ['r.order_id=$1'],
-        [id],
-        query,
-        'created_at,id',
-      );
-    },
+    // метод получения отзывов по заказу для административного просмотра
+    reviews: (id, query) =>
+      page(database, 'reviews', query, {
+        where: { order_id: id },
+        select: {
+          id: true,
+          author_id: true,
+          recipient_id: true,
+          rating: true,
+          text: true,
+          deleted_at: true,
+          created_at: true,
+        },
+        orderBy: oldest,
+      }),
 
+    // метод назначения администратора на жалобу и перевода её на рассмотрение
     async claim(id, actorId) {
-      await database.query(
-        "UPDATE workify.complaints SET status='IN_REVIEW',assigned_admin_id=$2,claimed_at=clock_timestamp() WHERE id=$1",
-        [id, actorId],
-      );
+      await database.complaints.updateMany({
+        where: { id },
+        data: {
+          status: 'IN_REVIEW',
+          assigned_admin_id: actorId,
+          claimed_at: await databaseNow(database),
+        },
+      });
     },
 
+    // метод сохранения итогового статуса жалобы, обоснования и даты решения
     async finish(id, status, note) {
-      await database.query(
-        'UPDATE workify.complaints SET status=$2,resolution_note=$3,resolved_at=clock_timestamp() WHERE id=$1',
-        [id, status, note],
-      );
+      await database.complaints.updateMany({
+        where: { id },
+        data: { status, resolution_note: note, resolved_at: await databaseNow(database) },
+      });
     },
 
+    // метод создания записи административного решения или санкции
     async action(actorId, targetId, type, reason, expiresAt, complaintId = null) {
       return (
-        await database.query(
-          'INSERT INTO workify.moderation_actions(admin_id,target_id,action_type,reason,expires_at,complaint_id,created_at) VALUES($1,$2,$3,$4,$5,$6,clock_timestamp()) RETURNING id',
-          [actorId, targetId, type, reason, expiresAt, complaintId],
-        )
-      ).rows[0].id;
+        await database.moderation_actions.create({
+          data: {
+            admin_id: actorId,
+            target_id: targetId,
+            action_type: type,
+            reason,
+            expires_at: date(expiresAt),
+            complaint_id: complaintId,
+            created_at: await databaseNow(database),
+          },
+        })
+      ).id;
     },
 
+    // метод сохранения блокировки аккаунта с автором, причиной и сроком
     async block(target, actorId, reason, expiresAt) {
-      await database.query(
-        "UPDATE workify.users SET status='BLOCKED',blocked_by=$2,blocked_at=clock_timestamp(),blocked_until=$3,block_reason=$4 WHERE id=$1",
-        [target.id, actorId, expiresAt, reason],
-      );
+      await database.users.updateMany({
+        where: { id: target.id },
+        data: {
+          status: 'BLOCKED',
+          blocked_by: actorId,
+          blocked_at: await databaseNow(database),
+          blocked_until: date(expiresAt),
+          block_reason: reason,
+        },
+      });
     },
 
+    // метод отзыва всех ещё действующих сессий пользователя
     async revokeSessions(id) {
-      await database.query(
-        'UPDATE workify.auth_sessions SET revoked_at=clock_timestamp() WHERE user_id=$1 AND revoked_at IS NULL',
-        [id],
-      );
+      await database.auth_sessions.updateMany({
+        where: { user_id: id, revoked_at: null },
+        data: { revoked_at: await databaseNow(database) },
+      });
     },
 
+    // метод снятия блокировки и сохранения даты последней разблокировки
     async unblock(id) {
-      await database.query(
-        "UPDATE workify.users SET status='ACTIVE',blocked_by=NULL,blocked_at=NULL,blocked_until=NULL,block_reason=NULL,last_unblocked_at=clock_timestamp() WHERE id=$1",
-        [id],
-      );
+      await database.users.updateMany({
+        where: { id },
+        data: {
+          status: 'ACTIVE',
+          blocked_by: null,
+          blocked_at: null,
+          blocked_until: null,
+          block_reason: null,
+          last_unblocked_at: await databaseNow(database),
+        },
+      });
     },
 
+    // метод сохранения уведомления о решении по жалобе или применённой санкции
     async notify(recipientId, type, message, { complaintId = null, actionId = null } = {}) {
-      await database.query(
-        'INSERT INTO workify.notifications(recipient_id,event_type,message,complaint_id,moderation_action_id) VALUES($1,$2,$3,$4,$5)',
-        [recipientId, type, message, complaintId, actionId],
-      );
+      await database.notifications.create({
+        data: {
+          recipient_id: recipientId,
+          event_type: type,
+          message,
+          complaint_id: complaintId,
+          moderation_action_id: actionId,
+        },
+      });
     },
   };
 }

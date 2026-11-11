@@ -1,12 +1,40 @@
-export const sourceColumns = `s.id,s.project_id,s.customer_id,s.freelancer_id,s.message,s.offered_price::text AS offered_price,
-  s.offered_deadline_at,s.status,s.decided_at,s.closure_reason,s.created_at,s.updated_at,
-  p.title AS project_title,p.status AS project_status,
-  cu.username AS customer_username,cp.first_name AS customer_first_name,cp.last_name AS customer_last_name,
-  fu.username AS freelancer_username,fp.first_name AS freelancer_first_name,fp.last_name AS freelancer_last_name,
-  o.id AS order_id,o.status AS order_status,o.title_snapshot,o.description_snapshot,o.agreed_price::text AS agreed_price,o.initial_deadline_at,o.deadline_at,
-  COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'originalName',f.original_name,'mimeType',f.mime_type,'sizeBytes',f.size_bytes,'createdAt',f.created_at) ORDER BY f.created_at,f.id)
-    FROM workify.order_files ofile JOIN workify.stored_files f ON f.id=ofile.file_id WHERE ofile.order_id=o.id AND f.deleted_at IS NULL),'[]'::jsonb) AS order_files`;
+import { fileInclude, fileData, plain, userInclude } from './database-tools.js';
 
-export const sourceJoins = `JOIN workify.projects p ON p.id=s.project_id
-  JOIN workify.users cu ON cu.id=s.customer_id JOIN workify.profiles cp ON cp.user_id=cu.id
-  JOIN workify.users fu ON fu.id=s.freelancer_id JOIN workify.profiles fp ON fp.user_id=fu.id`;
+export const sourceInclude = {
+  project: true,
+  customer: userInclude,
+  freelancer: userInclude,
+  order: { include: { files: fileInclude } },
+};
+
+export function sourceData({ project, customer, freelancer, order, ...row }, now) {
+  return {
+    ...plain(row),
+    project_title: project.title,
+    project_status: project.status,
+    customer_username: customer.username,
+    customer_first_name: customer.profile.first_name,
+    customer_last_name: customer.profile.last_name,
+    freelancer_username: freelancer.username,
+    freelancer_first_name: freelancer.profile.first_name,
+    freelancer_last_name: freelancer.profile.last_name,
+    order_id: order?.id ?? null,
+    order_status: order?.status ?? null,
+    title_snapshot: order?.title_snapshot ?? null,
+    description_snapshot: order?.description_snapshot ?? null,
+    agreed_price:
+      order?.agreed_price == null
+        ? null
+        : String(
+            order.agreed_price instanceof Object
+              ? order.agreed_price.toFixed(2)
+              : order.agreed_price,
+          ),
+    initial_deadline_at: order?.initial_deadline_at ?? null,
+    deadline_at: order?.deadline_at ?? null,
+    order_files: order?.files.map((link) => fileData(link)) ?? [],
+    expired:
+      row.status === 'PENDING' &&
+      (row.offered_deadline_at <= now || (row.expires_at != null && row.expires_at <= now)),
+  };
+}

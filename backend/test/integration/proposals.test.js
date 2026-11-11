@@ -1,3 +1,5 @@
+import { withTransaction } from '../../src/repositories/transaction.js';
+import { createPrismaClient } from '../../src/config/prisma.js';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -6,7 +8,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadConfig } from '../../src/config/env.js';
 import { createDatabasePool } from '../../src/config/database.js';
-import { withTransaction } from '../../src/repositories/transaction.js';
+import { withTransaction as withPgTransaction } from '../helpers/pg-transaction.js';
 import { createAuthRepository } from '../../src/repositories/auth.repository.js';
 import { createAuthService } from '../../src/services/auth.service.js';
 import { createAccessTokens } from '../../src/utils/tokens.js';
@@ -29,8 +31,12 @@ if (process.env.WORKIFY_DB_TESTS !== '1') {
 const config = loadConfig({ ...process.env, NODE_ENV: 'test' });
 // Immutable audit/order events deliberately survive until the disposable volume is removed.
 const pool = createDatabasePool(config.database);
+const prisma = createPrismaClient(pool);
 
-after(() => pool.end());
+after(async () => {
+  await prisma.$disconnect();
+  await pool.end();
+});
 
 const future = () => new Date(Date.now() + 30 * 86400000).toISOString();
 
@@ -50,23 +56,23 @@ async function setup(context, { failEvent = () => false } = {}) {
   context.after(() => rm(directory, { recursive: true, force: true }));
 
   const fileService = createFileService({
-    repository: createFileRepository(pool),
+    repository: createFileRepository(prisma),
     storage: createLocalStorage(directory),
-    transaction: (op) => withTransaction(pool, (c) => op(createFileRepository(c))),
+    transaction: (op) => withTransaction(prisma, (c) => op(createFileRepository(c))),
   });
 
   const projectService = createProjectService({
-    repository: createProjectRepository(pool),
+    repository: createProjectRepository(prisma),
     fileService,
     transaction: (op) =>
-      withTransaction(pool, (c) => op(createProjectRepository(c), createFileRepository(c))),
+      withTransaction(prisma, (c) => op(createProjectRepository(c), createFileRepository(c))),
   });
 
   const proposalService = createProposalService({
-    repository: createProposalRepository(pool),
+    repository: createProposalRepository(prisma),
     assignmentService: createAssignmentService(),
     transaction: (op) =>
-      withTransaction(pool, (c) => {
+      withTransaction(prisma, (c) => {
         const assignments = createAssignmentRepository(c);
         const original = assignments.createdEvent;
 
@@ -83,8 +89,8 @@ async function setup(context, { failEvent = () => false } = {}) {
   });
 
   const authService = await createAuthService({
-    repository: createAuthRepository(pool),
-    transaction: (op) => withTransaction(pool, (c) => op(createAuthRepository(c))),
+    repository: createAuthRepository(prisma),
+    transaction: (op) => withTransaction(prisma, (c) => op(createAuthRepository(c))),
     accessTokens: createAccessTokens(config.auth),
     sessionTtlDays: 30,
   });
@@ -604,7 +610,7 @@ test('accepted agreement and file snapshot remain available to parties after a l
   const source = await app.proposal(author, project);
   const accepted = (await app.act(owner, source, 'accept')).body.proposal;
 
-  await withTransaction(pool, async (c) => {
+  await withPgTransaction(pool, async (c) => {
     await c.query(
       "UPDATE workify.orders SET status='CANCELLED',cancelled_at=clock_timestamp(),cancelled_by=customer_id,cancellation_reason='Fixture cancellation' WHERE id=$1",
       [accepted.order.id],

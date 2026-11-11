@@ -1,154 +1,168 @@
 import { createAuditRepository } from './audit.repository.js';
-// Keep every association here: a generic delete must respect future private contexts too.
-const references = [
-  'profile_files',
-  'portfolio_files',
-  'project_files',
-  'order_files',
-  'submission_files',
-  'complaint_files',
-  'review_files',
-];
+import { databaseNow, lockRows, participant, activeUser, plain } from './database-tools.js';
 
-const isUsed = (alias) =>
-  references
-    .map((table) => `EXISTS (SELECT 1 FROM workify.${table} r WHERE r.file_id = ${alias}.id)`)
-    .join(' OR ');
+const references = [
+  'ref_profile_files',
+  'ref_portfolio_files',
+  'ref_project_files',
+  'ref_order_files',
+  'ref_submission_files',
+  'ref_complaint_files',
+  'ref_review_files',
+];
+const usedWhere = {
+  OR: references.map((name) => ({
+    [name]: name === 'ref_profile_files' ? { isNot: null } : { some: {} },
+  })),
+};
 
 export function createFileRepository(database) {
   return {
     audit: createAuditRepository(database).audit,
+
+    // метод блокировки аккаунта перед изменением файлов пользователя
     async lockActor(id) {
-      return (
-        await database.query(
-          'SELECT id, role, status, blocked_until FROM workify.users WHERE id=$1 FOR UPDATE',
-          [id],
-        )
-      ).rows[0];
+      await lockRows(database, 'users', [id]);
+
+      return database.users.findUnique({ where: { id } });
     },
 
-    async countOwn(id) {
-      return Number(
-        (
-          await database.query(
-            'SELECT count(*) FROM workify.stored_files WHERE uploaded_by=$1 AND deleted_at IS NULL',
-            [id],
-          )
-        ).rows[0].count,
-      );
-    },
+    // метод подсчёта собственных файлов, не помеченных на удаление
+    countOwn: (id) => database.stored_files.count({ where: { uploaded_by: id, deleted_at: null } }),
 
-    async insert(actorId, file) {
-      return (
-        await database.query(
-          `INSERT INTO workify.stored_files (uploaded_by, storage_key, original_name, mime_type, size_bytes, sha256)
-        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-          [actorId, file.storageKey, file.originalName, file.mimeType, file.sizeBytes, file.sha256],
-        )
-      ).rows[0];
-    },
+    // метод сохранения метаданных файла и внутреннего ключа его хранения
+    insert: (actorId, file) =>
+      database.stored_files.create({
+        data: {
+          uploaded_by: actorId,
+          storage_key: file.storageKey,
+          original_name: file.originalName,
+          mime_type: file.mimeType,
+          size_bytes: file.sizeBytes,
+          sha256: file.sha256,
+        },
+      }),
 
+    // метод получения собственных файлов с признаком использования в сохранённых данных
     async listOwn(actorId) {
-      return (
-        await database.query(
-          `SELECT f.*, (${isUsed('f')}) AS in_use FROM workify.stored_files f
-        WHERE uploaded_by=$1 AND deleted_at IS NULL ORDER BY created_at DESC,id`,
-          [actorId],
-        )
-      ).rows;
+      const [rows, used] = await Promise.all([
+        database.stored_files.findMany({
+          where: { uploaded_by: actorId, deleted_at: null },
+          orderBy: [{ created_at: 'desc' }, { id: 'asc' }],
+        }),
+        database.stored_files.findMany({
+          where: { uploaded_by: actorId, deleted_at: null, ...usedWhere },
+          select: { id: true },
+        }),
+      ]);
+      const ids = new Set(used.map((row) => row.id));
+
+      return rows.map((row) => ({ ...plain(row), in_use: ids.has(row.id) }));
     },
 
+    // метод блокировки выбранных файлов и чтения записей, не помеченных на удаление
     async lockFiles(ids) {
-      return (
-        await database.query(
-          'SELECT * FROM workify.stored_files WHERE id=ANY($1::uuid[]) AND deleted_at IS NULL ORDER BY id FOR UPDATE',
-          [ids],
-        )
-      ).rows;
+      const locked = await lockRows(database, 'stored_files', ids);
+
+      return plain(
+        await database.stored_files.findMany({
+          where: { id: { in: locked }, deleted_at: null },
+          orderBy: { id: 'asc' },
+        }),
+      );
     },
 
+    // метод проверки наличия связей файла с профилем, проектами и другими данными приложения
     async used(id) {
-      return (
-        await database.query(
-          `SELECT (${isUsed('f')}) AS used FROM workify.stored_files f WHERE id=$1`,
-          [id],
-        )
-      ).rows[0]?.used;
+      return Boolean(
+        await database.stored_files.findFirst({
+          where: { id, ...usedWhere },
+          select: { id: true },
+        }),
+      );
     },
 
+    // метод получения файла с учётом владельца, публичных связей и доступа администратора
     async findReadable(id, actorId) {
-      return (
-        await database.query(
-          `SELECT f.* FROM workify.stored_files f WHERE f.id=$1 AND f.deleted_at IS NULL
-        AND (f.uploaded_by=$2::uuid OR EXISTS (SELECT 1 FROM workify.profile_files pf
-          JOIN workify.v_public_profiles p ON p.user_id=pf.user_id WHERE pf.file_id=f.id)
-        OR EXISTS (SELECT 1 FROM workify.portfolio_files pf JOIN workify.portfolio_items i ON i.id=pf.portfolio_item_id
-          JOIN workify.v_public_profiles p ON p.user_id=i.user_id WHERE pf.file_id=f.id)
-        OR EXISTS (SELECT 1 FROM workify.review_files rf JOIN workify.reviews r ON r.id=rf.review_id JOIN workify.v_public_profiles p ON p.user_id=r.recipient_id WHERE rf.file_id=f.id AND r.deleted_at IS NULL)
-        OR EXISTS (SELECT 1 FROM workify.project_files pf JOIN workify.projects p ON p.id=pf.project_id
-          JOIN workify.v_public_profiles customer ON customer.user_id=p.customer_id
-          WHERE pf.file_id=f.id AND p.status='OPEN')
-        OR EXISTS (SELECT 1 FROM workify.order_files ofile JOIN workify.orders o ON o.id=ofile.order_id
-          WHERE ofile.file_id=f.id AND $2::uuid IN (o.customer_id,o.freelancer_id))
-        OR EXISTS (SELECT 1 FROM workify.submission_files sf JOIN workify.order_submissions s ON s.id=sf.submission_id
-          JOIN workify.orders o ON o.id=s.order_id WHERE sf.file_id=f.id AND $2::uuid IN (o.customer_id,o.freelancer_id))
-        OR EXISTS (SELECT 1 FROM workify.users admin WHERE admin.id=$2::uuid AND admin.role='ADMIN' AND (admin.status='ACTIVE' OR admin.blocked_until<=statement_timestamp())
-          AND (EXISTS(SELECT 1 FROM workify.complaint_files cf WHERE cf.file_id=f.id)
-            OR EXISTS(SELECT 1 FROM workify.order_files ofile JOIN workify.complaints c ON c.order_id=ofile.order_id WHERE ofile.file_id=f.id)
-            OR EXISTS(SELECT 1 FROM workify.submission_files sf JOIN workify.order_submissions s ON s.id=sf.submission_id JOIN workify.complaints c ON c.order_id=s.order_id WHERE sf.file_id=f.id)
-            OR EXISTS(SELECT 1 FROM workify.project_files pf JOIN workify.orders o ON o.project_id=pf.project_id JOIN workify.complaints c ON c.order_id=o.id WHERE pf.file_id=f.id))))`,
-          [id, actorId ?? null],
-        )
-      ).rows[0];
+      const now = await databaseNow(database);
+      const client = { role: 'CLIENT', ...activeUser(now) };
+      const actor = actorId ? await database.users.findUnique({ where: { id: actorId } }) : null;
+      const admin =
+        actor?.role === 'ADMIN' &&
+        (actor.status === 'ACTIVE' || (actor.blocked_until && actor.blocked_until <= now));
+      const access = [
+        ...(actorId
+          ? [
+              { uploaded_by: actorId },
+              { ref_order_files: { some: { parent: participant(actorId) } } },
+              { ref_submission_files: { some: { parent: { order: participant(actorId) } } } },
+            ]
+          : []),
+        { ref_profile_files: { is: { parent: { user: client } } } },
+        { ref_portfolio_files: { some: { parent: { user: client } } } },
+        { ref_review_files: { some: { parent: { deleted_at: null, recipient: client } } } },
+        { ref_project_files: { some: { parent: { status: 'OPEN', customer: client } } } },
+        ...(admin
+          ? [
+              { ref_complaint_files: { some: {} } },
+              { ref_order_files: { some: { parent: { complaints: { some: {} } } } } },
+              {
+                ref_submission_files: { some: { parent: { order: { complaints: { some: {} } } } } },
+              },
+              {
+                ref_project_files: {
+                  some: { parent: { orders: { some: { complaints: { some: {} } } } } },
+                },
+              },
+            ]
+          : []),
+      ];
+
+      return plain(
+        await database.stored_files.findFirst({ where: { id, deleted_at: null, OR: access } }),
+      );
     },
 
+    // метод пометки на удаление только файлов без связей с сохранёнными данными
     async markUnusedDeleted(ids) {
-      await database.query(
-        `UPDATE workify.stored_files f SET deleted_at=clock_timestamp()
-        WHERE id=ANY($1::uuid[]) AND deleted_at IS NULL AND NOT (${isUsed('f')})`,
-        [ids],
-      );
+      await database.stored_files.updateMany({
+        where: { id: { in: ids }, deleted_at: null, NOT: usedWhere },
+        data: { deleted_at: await databaseNow(database) },
+      });
     },
 
-    async pendingDeletes() {
-      return (
-        await database.query(
-          'SELECT id,storage_key FROM workify.stored_files WHERE deleted_at IS NOT NULL ORDER BY deleted_at LIMIT 100',
-        )
-      ).rows;
-    },
+    // метод получения до ста файлов, ожидающих физического удаления из хранилища
+    pendingDeletes: () =>
+      database.stored_files.findMany({
+        where: { deleted_at: { not: null } },
+        select: { id: true, storage_key: true },
+        orderBy: { deleted_at: 'asc' },
+        take: 100,
+      }),
 
+    // метод удаления метаданных ранее помеченного файла после очистки хранилища
     async finishDelete(id) {
-      await database.query(
-        'DELETE FROM workify.stored_files WHERE id=$1 AND deleted_at IS NOT NULL',
-        [id],
-      );
+      await database.stored_files.deleteMany({ where: { id, deleted_at: { not: null } } });
     },
 
+    // метод получения идентификатора файла текущего аватара
     async avatar(userId) {
       return (
-        (
-          await database.query('SELECT file_id FROM workify.profile_files WHERE user_id=$1', [
-            userId,
-          ])
-        ).rows[0]?.file_id ?? null
+        (await database.profile_files.findUnique({ where: { user_id: userId } }))?.file_id ?? null
       );
     },
 
+    // метод замены или удаления связи с аватаром и обновления даты профиля
     async setAvatar(userId, fileId) {
-      await database.query('DELETE FROM workify.profile_files WHERE user_id=$1', [userId]);
+      await database.profile_files.deleteMany({ where: { user_id: userId } });
 
-      if (fileId) {
-        await database.query('INSERT INTO workify.profile_files (user_id,file_id) VALUES ($1,$2)', [
-          userId,
-          fileId,
-        ]);
-      }
+      if (fileId)
+        await database.profile_files.create({ data: { user_id: userId, file_id: fileId } });
 
-      await database.query(
-        'UPDATE workify.profiles SET updated_at=clock_timestamp() WHERE user_id=$1',
-        [userId],
-      );
+      await database.profiles.updateMany({
+        where: { user_id: userId },
+        data: { updated_at: await databaseNow(database) },
+      });
     },
   };
 }

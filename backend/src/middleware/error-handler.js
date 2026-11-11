@@ -1,4 +1,5 @@
 import { AppError } from '../utils/app-error.js';
+import { databaseError } from '../utils/database-error.js';
 
 const databaseUnavailable = new Set([
   'ECONNREFUSED',
@@ -13,6 +14,8 @@ const databaseUnavailable = new Set([
 ]);
 
 function publicError(error) {
+  error = databaseError(error);
+
   if (error instanceof AppError) {
     if (error.statusCode >= 400 && error.statusCode < 500) {
       return error;

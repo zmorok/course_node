@@ -1,10 +1,11 @@
+import { createPrismaClient } from '../../src/config/prisma.js';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { loadConfig } from '../../src/config/env.js';
 import { createDatabasePool } from '../../src/config/database.js';
 import { createHealthRepository } from '../../src/repositories/health.repository.js';
-import { withTransaction } from '../../src/repositories/transaction.js';
+import { withTransaction } from '../helpers/pg-transaction.js';
 
 if (process.env.WORKIFY_DB_TESTS !== '1') {
   throw new Error(
@@ -14,6 +15,7 @@ if (process.env.WORKIFY_DB_TESTS !== '1') {
 
 const config = loadConfig({ ...process.env, NODE_ENV: 'test', PGPOOL_MAX: '2' });
 const pool = createDatabasePool(config.database);
+const prisma = createPrismaClient(pool);
 const ownedIds = [];
 
 after(async () => {
@@ -22,11 +24,12 @@ after(async () => {
       await pool.query('DELETE FROM workify.categories WHERE id = ANY($1::uuid[])', [ownedIds]);
     }
   } finally {
+    await prisma.$disconnect();
     await pool.end();
   }
 });
 test('repository connects to real PostgreSQL 17 through the configured pool', async () => {
-  assert.equal(await createHealthRepository(pool).ping(), true);
+  assert.equal(await createHealthRepository(prisma).ping(), true);
 
   const result = await pool.query(
     "SELECT current_setting('server_version_num')::int / 10000 AS major",
@@ -92,5 +95,5 @@ test('a SQL constraint violation is rolled back and the pooled connection remain
     ),
     { code: '23505' },
   );
-  assert.equal(await createHealthRepository(pool).ping(), true);
+  assert.equal(await createHealthRepository(prisma).ping(), true);
 });

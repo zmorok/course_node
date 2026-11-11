@@ -1,3 +1,4 @@
+import { createPrismaClient } from '../../src/config/prisma.js';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -12,8 +13,12 @@ if (process.env.WORKIFY_DB_TESTS !== '1') {
 
 const config = loadConfig({ ...process.env, NODE_ENV: 'test' });
 const pool = createDatabasePool(config.database);
+const prisma = createPrismaClient(pool);
 
-after(() => pool.end());
+after(async () => {
+  await prisma.$disconnect();
+  await pool.end();
+});
 
 async function setup(context, options) {
   const app = await marketplace(context, pool, config, options);
@@ -242,7 +247,7 @@ test('only current active admins read audit and no application or SQL command mu
 });
 test('writer and reader remove nested credentials including legacy audit snapshots', async (context) => {
   const app = await setup(context);
-  const repo = createAuditRepository(pool);
+  const repo = createAuditRepository(prisma);
   const id = randomUUID();
 
   await repo.audit(

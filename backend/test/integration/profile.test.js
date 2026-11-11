@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { loadConfig } from '../../src/config/env.js';
 import { createDatabasePool } from '../../src/config/database.js';
+import { createPrismaClient } from '../../src/config/prisma.js';
 import { createAuthRepository } from '../../src/repositories/auth.repository.js';
 import { createProfileRepository } from '../../src/repositories/profile.repository.js';
 import { withTransaction } from '../../src/repositories/transaction.js';
@@ -18,10 +19,14 @@ if (process.env.WORKIFY_DB_TESTS !== '1') {
 
 const config = loadConfig({ ...process.env, NODE_ENV: 'test' });
 const pool = createDatabasePool(config.database);
+const prisma = createPrismaClient(pool);
 // Immutable audit keeps its actors until the disposable database is removed.
 const owned = [];
 
-after(() => pool.end());
+after(async () => {
+  await prisma.$disconnect();
+  await pool.end();
+});
 
 const requestOptions = (token, method = 'GET', body) => ({
   method,
@@ -35,17 +40,17 @@ const requestOptions = (token, method = 'GET', body) => ({
 
 async function setup(context) {
   const authService = await createAuthService({
-    repository: createAuthRepository(pool),
+    repository: createAuthRepository(prisma),
     transaction: (operation) =>
-      withTransaction(pool, (client) => operation(createAuthRepository(client))),
+      withTransaction(prisma, (client) => operation(createAuthRepository(client))),
     accessTokens: createAccessTokens(config.auth),
     sessionTtlDays: config.auth.sessionTtlDays,
   });
 
   const profileService = createProfileService({
-    repository: createProfileRepository(pool),
+    repository: createProfileRepository(prisma),
     transaction: (operation) =>
-      withTransaction(pool, (client) => operation(createProfileRepository(client))),
+      withTransaction(prisma, (client) => operation(createProfileRepository(client))),
   });
 
   const app = await startApp(
@@ -385,7 +390,7 @@ test('ADMIN can edit own personal data but has no freelancer skills or public cl
   const app = await setup(context);
   const account = await app.register();
 
-  await createAuthRepository(pool).promoteToAdmin(account.input.email);
+  await createAuthRepository(prisma).promoteToAdmin(account.input.email);
   assert.equal(
     (await app.patch(account.token, { firstName: 'Администратор' })).response.status,
     200,
@@ -420,4 +425,67 @@ test('blocking and logout prevent profile mutations; expired temporary blocks be
   options.headers.Cookie = account.cookie;
   assert.equal((await app.request('/api/auth/logout', options)).response.status, 204);
   assert.equal((await app.patch(account.token, { firstName: 'Changed' })).response.status, 401);
+});
+
+test('Prisma rolls back account, profile, skills and audit together when an operation fails', async (context) => {
+  const app = await setup(context);
+  const account = await app.register();
+  const before = (await app.get(account.token)).body.profile;
+  const [skill] = await createProfileRepository(prisma).listSkills();
+  const failure = new Error('failure after writing profile audit');
+
+  await assert.rejects(
+    withTransaction(prisma, async (client) => {
+      const repository = createProfileRepository(client);
+
+      await repository.lockAccount(account.id);
+      await repository.updateAccount(account.id, { username: `r_${randomUUID().slice(0, 8)}` });
+      await repository.updateProfile(account.id, { city: 'Rollback city' });
+      await repository.replaceSkills(account.id, [skill.id]);
+      await repository.audit(account.id, 'PROFILE_ROLLBACK_TEST', 'user', account.id);
+
+      throw failure;
+    }),
+    (error) => error === failure,
+  );
+
+  assert.deepEqual((await app.get(account.token)).body.profile, before);
+  const audit = await pool.query(
+    "SELECT id FROM workify.audit_logs WHERE actor_id=$1 AND action='PROFILE_ROLLBACK_TEST'",
+    [account.id],
+  );
+
+  assert.equal(audit.rowCount, 0);
+});
+
+test('Prisma preserves PostgreSQL check errors and rolls back earlier account changes', async (context) => {
+  const app = await setup(context);
+  const account = await app.register();
+  const before = (await app.get(account.token)).body.profile;
+
+  await assert.rejects(
+    withTransaction(prisma, async (client) => {
+      const repository = createProfileRepository(client);
+
+      await repository.lockAccount(account.id);
+      await repository.updateAccount(account.id, { username: `r_${randomUUID().slice(0, 8)}` });
+      await repository.updateProfile(account.id, { firstName: '' });
+    }),
+    (error) => error.code === '23514',
+  );
+
+  assert.deepEqual((await app.get(account.token)).body.profile, before);
+});
+
+test('disconnecting Prisma keeps the shared PostgreSQL pool and other clients usable', async () => {
+  const other = createPrismaClient(pool);
+
+  try {
+    assert.equal((await createProfileRepository(other).listSkills()).length, 20);
+  } finally {
+    await other.$disconnect();
+  }
+
+  assert.equal((await pool.query('SELECT 1 AS ready')).rows[0].ready, 1);
+  assert.equal((await createProfileRepository(prisma).listSkills()).length, 20);
 });

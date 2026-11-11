@@ -1,10 +1,15 @@
 import { createAuditRepository } from './audit.repository.js';
+import {
+  databaseNow,
+  lockRows,
+  fields,
+  skillInclude,
+  skillData,
+  plain,
+  replaceLinks,
+} from './database-tools.js';
 
-const skills = `COALESCE((SELECT jsonb_agg(jsonb_build_object('id', s.id, 'slug', s.slug, 'name', s.name)
-  ORDER BY s.name, s.id) FROM workify.user_skills us JOIN workify.skills s ON s.id = us.skill_id
-  WHERE us.user_id = p.user_id), '[]'::jsonb) AS skills`;
 const accountColumns = { email: 'email', username: 'username' };
-
 const profileColumns = {
   middleName: 'middle_name',
   gender: 'gender',
@@ -18,103 +23,104 @@ const profileColumns = {
 };
 
 export function createProfileRepository(database) {
-  function assignments(columns, input) {
-    // SQL identifiers come exclusively from the internal maps, never request keys.
-    const entries = Object.entries(columns).filter(([key]) => Object.hasOwn(input, key));
-
-    return {
-      sql: entries.map(([, column], index) => `${column} = $${index + 2}`).join(', '),
-      values: entries.map(([key]) => input[key]),
-    };
-  }
-
   return {
     audit: createAuditRepository(database).audit,
+
+    // метод получения собственного профиля с контактами, навыками и текущим аватаром
     async findOwn(userId) {
-      return (
-        await database.query(
-          `SELECT u.id, u.email, u.username, p.first_name, p.last_name,
-        p.middle_name, p.gender, u.last_online_at, p.headline, p.description, p.phone, p.city, p.country, p.created_at, p.updated_at,
-        (SELECT file_id FROM workify.profile_files WHERE user_id=p.user_id) AS avatar_file_id, ${skills}
-        FROM workify.users u JOIN workify.profiles p ON p.user_id = u.id WHERE u.id = $1`,
-          [userId],
-        )
-      ).rows[0];
+      const user = await database.users.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          last_online_at: true,
+          profile: { include: { avatar: true } },
+          skills: skillInclude,
+        },
+      });
+
+      if (!user?.profile) return undefined;
+
+      const { profile, skills, ...row } = user;
+
+      return {
+        ...profile,
+        ...row,
+        avatar_file_id: profile.avatar?.file_id ?? null,
+        skills: skills.map(skillData),
+      };
     },
 
+    // метод получения публичного профиля с рейтингами и навыками
     async findPublic(userId) {
-      return (
-        await database.query(
-          `SELECT p.*, ${skills} FROM workify.v_public_profiles p WHERE p.user_id = $1`,
-          [userId],
-        )
-      ).rows[0];
+      const row = await database.v_public_profiles.findUnique({ where: { user_id: userId } });
+
+      if (!row) return undefined;
+
+      return {
+        ...plain(row),
+        skills: (
+          await database.user_skills.findMany({ where: { user_id: userId }, ...skillInclude })
+        ).map(skillData),
+      };
     },
 
-    async lockAccount(userId) {
-      return (
-        await database.query(
-          `SELECT id, email, username, password_hash, role, status, blocked_until
-        FROM workify.users WHERE id = $1 FOR UPDATE`,
-          [userId],
-        )
-      ).rows[0];
+    // метод блокировки и повторного чтения аккаунта перед изменением профиля
+    async lockAccount(id) {
+      await lockRows(database, 'users', [id]);
+
+      return database.users.findUnique({ where: { id } });
     },
 
+    // метод сохранения переданного хеша нового пароля
     async updatePassword(id, hash) {
-      await database.query('UPDATE workify.users SET password_hash=$2 WHERE id=$1', [id, hash]);
+      await database.users.updateMany({ where: { id }, data: { password_hash: hash } });
     },
 
+    // метод отзыва всех ещё действующих сессий пользователя
     async revokeSessions(id) {
-      await database.query(
-        'UPDATE workify.auth_sessions SET revoked_at=COALESCE(revoked_at,clock_timestamp()) WHERE user_id=$1',
-        [id],
-      );
+      await database.auth_sessions.updateMany({
+        where: { user_id: id, revoked_at: null },
+        data: { revoked_at: await databaseNow(database) },
+      });
     },
 
-    async updateAccount(userId, patch) {
-      const changes = assignments(accountColumns, patch);
+    // метод изменения разрешённых полей email и имени пользователя
+    async updateAccount(id, patch) {
+      const data = fields(patch, accountColumns);
 
-      if (changes.values.length) {
-        await database.query(`UPDATE workify.users SET ${changes.sql} WHERE id = $1`, [
-          userId,
-          ...changes.values,
-        ]);
-      }
+      if (Object.keys(data).length) await database.users.updateMany({ where: { id }, data });
     },
 
-    async updateProfile(userId, patch) {
-      const changes = assignments(profileColumns, patch);
+    // метод изменения разрешённых полей профиля с обновлением даты изменения
+    async updateProfile(id, patch) {
+      const data = fields(patch, profileColumns);
 
-      await database.query(
-        `UPDATE workify.profiles SET ${changes.sql || 'updated_at = clock_timestamp()'} WHERE user_id = $1`,
-        [userId, ...changes.values],
-      );
+      if (!Object.keys(data).length) data.updated_at = await databaseNow(database);
+
+      await database.profiles.updateMany({ where: { user_id: id }, data });
     },
 
-    async listSkills() {
-      return (await database.query('SELECT id, slug, name FROM workify.skills ORDER BY name, id'))
-        .rows;
-    },
+    // метод получения отсортированного справочника навыков
+    listSkills: () =>
+      database.skills.findMany({
+        select: { id: true, slug: true, name: true },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      }),
 
+    // метод проверки существования навыков с блокировкой от их параллельного изменения
     async findSkillIds(ids) {
-      return (
-        await database.query('SELECT id FROM workify.skills WHERE id = ANY($1::uuid[]) FOR SHARE', [
-          ids,
-        ])
-      ).rows.map((row) => row.id);
+      return lockRows(database, 'skills', ids, true);
     },
 
-    async replaceSkills(userId, ids) {
-      await database.query('DELETE FROM workify.user_skills WHERE user_id = $1', [userId]);
-      await database.query(
-        'INSERT INTO workify.user_skills (user_id, skill_id) SELECT $1, unnest($2::uuid[])',
-        [userId, ids],
-      );
-      await database.query(
-        'UPDATE workify.profiles SET updated_at = clock_timestamp() WHERE user_id = $1',
-        [userId],
-      );
+    // метод полной замены связей пользователя с навыками и обновления даты профиля
+    async replaceSkills(id, ids) {
+      await replaceLinks(database, 'user_skills', 'user_id', id, 'skill_id', ids);
+      await database.profiles.updateMany({
+        where: { user_id: id },
+        data: { updated_at: await databaseNow(database) },
+      });
     },
   };
 }

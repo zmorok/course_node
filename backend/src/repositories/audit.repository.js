@@ -1,116 +1,113 @@
-import { auditData } from '../utils/audit-data.js';
-import { currentAuditContext } from '../utils/audit-context.js';
+import { Prisma } from '@prisma/client';
+import { auditEntry } from '../utils/audit-entry.js';
+import { databaseNow, lockRows, page, newest, oldest, date } from './database-tools.js';
 
 export function createAuditRepository(database) {
   return {
+    // метод блокировки строки аккаунта перед повторной проверкой прав администратора
     async lockAdmin(id) {
-      return (
-        await database.query(
-          'SELECT id,role,status,blocked_until FROM workify.users WHERE id=$1 FOR UPDATE',
-          [id],
-        )
-      ).rows[0];
+      await lockRows(database, 'users', [id]);
+
+      return database.users.findUnique({ where: { id } });
     },
 
+    // метод сохранения импортированных событий с пропуском дубликатов по хешу
     async importEntries(actorId, entries) {
-      let count = 0;
-
-      for (const entry of entries) {
-        count += (
-          await database.query(
-            'INSERT INTO workify.audit_imported_entries(digest,imported_by,original_data) VALUES($1,$2,$3::jsonb) ON CONFLICT(digest) DO NOTHING',
-            [entry.digest, actorId, JSON.stringify(entry.data)],
-          )
-        ).rowCount;
-      }
-
-      return count;
+      return (
+        await database.audit_imported_entries.createMany({
+          skipDuplicates: true,
+          data: entries.map((entry) => ({
+            digest: entry.digest,
+            imported_by: actorId,
+            original_data: entry.data,
+          })),
+        })
+      ).count;
     },
 
-    async imported(query) {
-      const result = await database.query(
-        `WITH page AS (SELECT id,imported_by,imported_at,original_data FROM workify.audit_imported_entries ORDER BY imported_at DESC,id DESC LIMIT $1 OFFSET $2) SELECT (SELECT count(*) FROM workify.audit_imported_entries)::int AS total,COALESCE((SELECT jsonb_agg(page ORDER BY imported_at DESC,id DESC) FROM page),'[]'::jsonb) AS items`,
-        [query.pageSize, (query.page - 1) * query.pageSize],
-      );
+    // метод получения страницы импортированных событий аудита
+    imported: (query) =>
+      page(database, 'audit_imported_entries', query, {
+        orderBy: [{ imported_at: 'desc' }, { id: 'desc' }],
+      }),
 
-      return result.rows[0];
+    // метод сохранения события аудита с контекстом запроса и очищенными снимками данных
+    async audit(...args) {
+      const entry = auditEntry(...args);
+
+      await database.audit_logs.create({
+        data: {
+          actor_id: entry.actorId,
+          action: entry.action,
+          entity_type: entry.entityType,
+          entity_id: entry.entityId,
+          metadata: JSON.parse(entry.metadata),
+          old_data: entry.oldData ? JSON.parse(entry.oldData) : Prisma.DbNull,
+          new_data: entry.newData ? JSON.parse(entry.newData) : Prisma.DbNull,
+          ip_address: entry.ip,
+          created_at: await databaseNow(database),
+        },
+      });
     },
 
-    async audit(actorId, action, entityType, entityId, metadata = {}, snapshots = {}) {
-      if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
-        throw new TypeError('Audit metadata must be an object');
-      }
-
-      const context = currentAuditContext();
-
-      await database.query(
-        `INSERT INTO workify.audit_logs(actor_id,action,entity_type,entity_id,metadata,old_data,new_data,ip_address,created_at)
-    VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8,clock_timestamp())`,
-        [
-          actorId,
-          action,
-          entityType,
-          entityId,
-          JSON.stringify(
-            auditData({
-              ...metadata,
-              ...(context.requestId ? { requestId: context.requestId } : {}),
-            }),
-          ),
-          snapshots.oldData ? JSON.stringify(auditData(snapshots.oldData)) : null,
-          snapshots.newData ? JSON.stringify(auditData(snapshots.newData)) : null,
-          context.ip ?? null,
-        ],
-      );
-    },
-
+    // метод поиска событий аудита с данными автора, фильтрами и пагинацией
     async list(query) {
-      const values = [];
-      const where = [];
+      const where = {};
 
-      const bind = (value) => {
-        values.push(value);
+      for (const [key, column] of Object.entries({
+        actorId: 'actor_id',
+        action: 'action',
+        entityType: 'entity_type',
+        entityId: 'entity_id',
+      }))
+        if (query[key]) where[column] = query[key];
 
-        return `$${values.length}`;
+      if (query.createdFrom || query.createdTo)
+        where.created_at = {
+          gte: query.createdFrom ? date(query.createdFrom) : undefined,
+          lte: query.createdTo ? date(query.createdTo) : undefined,
+        };
+
+      const options = {
+        where,
+        include: { actor: { include: { profile: true } } },
+        orderBy: query.sort === 'oldest' ? oldest : newest,
       };
 
-      for (const [key, column] of [
-        ['actorId', 'a.actor_id'],
-        ['action', 'a.action'],
-        ['entityType', 'a.entity_type'],
-        ['entityId', 'a.entity_id'],
-      ]) {
-        if (query[key]) {
-          where.push(`${column}=${bind(query[key])}`);
-        }
-      }
+      const flatten = ({ actor, ...row }) => ({
+        ...row,
+        username: actor?.username ?? null,
+        first_name: actor?.profile?.first_name ?? null,
+        last_name: actor?.profile?.last_name ?? null,
+      });
 
       if (query.search) {
-        where.push(
-          `strpos(lower(concat_ws(' ',u.username,p.first_name,p.last_name,a.action,a.entity_type,a.entity_id::text)),lower(${bind(query.search)}))>0`,
-        );
+        const rows = (await database.audit_logs.findMany(options))
+          .map(flatten)
+          .filter((row) =>
+            [
+              row.username,
+              row.first_name,
+              row.last_name,
+              row.action,
+              row.entity_type,
+              row.entity_id,
+            ]
+              .filter(Boolean)
+              .join(' ')
+              .toLowerCase()
+              .includes(query.search.toLowerCase()),
+          );
+
+        return {
+          total: rows.length,
+          items: rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize),
+        };
       }
 
-      if (query.createdFrom) {
-        where.push(`a.created_at>=${bind(query.createdFrom)}`);
-      }
+      const result = await page(database, 'audit_logs', query, options);
 
-      if (query.createdTo) {
-        where.push(`a.created_at<=${bind(query.createdTo)}`);
-      }
-
-      const sort = query.sort === 'oldest' ? 'created_at,id' : 'created_at DESC,id DESC';
-
-      values.push(query.pageSize, (query.page - 1) * query.pageSize);
-
-      return (
-        await database.query(
-          `WITH matches AS (SELECT a.id,a.actor_id,a.action,a.entity_type,a.entity_id,a.created_at,a.metadata,a.old_data,a.new_data,a.ip_address,u.username,p.first_name,p.last_name
-    FROM workify.audit_logs a LEFT JOIN workify.users u ON u.id=a.actor_id LEFT JOIN workify.profiles p ON p.user_id=a.actor_id ${where.length ? `WHERE ${where.join(' AND ')}` : ''}),
-    page AS (SELECT * FROM matches ORDER BY ${sort} LIMIT $${values.length - 1} OFFSET $${values.length}) SELECT (SELECT count(*) FROM matches)::int AS total,COALESCE((SELECT jsonb_agg(page ORDER BY ${sort}) FROM page),'[]'::jsonb) AS items`,
-          values,
-        )
-      ).rows[0];
+      return { ...result, items: result.items.map(flatten) };
     },
   };
 }

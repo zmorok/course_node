@@ -1,155 +1,158 @@
 import { createAuditRepository } from './audit.repository.js';
+import { databaseNow, lockRows, userInclude } from './database-tools.js';
 
-const publicColumns = `u.id, u.email, u.username, u.role, u.status, u.blocked_until,
-  p.first_name, p.last_name`;
+const publicUser = (row) => (row?.profile ? { ...row, ...row.profile, id: row.id } : undefined);
 
 export function createAuthRepository(database) {
   return {
     audit: createAuditRepository(database).audit,
+
+    // метод обновления времени присутствия пользователя не чаще одного раза в минуту
     async touchPresence(id) {
-      await database.query(
-        "UPDATE workify.users SET last_online_at=clock_timestamp() WHERE id=$1 AND (last_online_at IS NULL OR last_online_at < now()-interval '1 minute')",
-        [id],
-      );
+      const now = await databaseNow(database);
+
+      await database.users.updateMany({
+        where: {
+          id,
+          OR: [
+            { last_online_at: null },
+            { last_online_at: { lt: new Date(now.getTime() - 60000) } },
+          ],
+        },
+        data: { last_online_at: now },
+      });
     },
 
+    // метод получения аккаунта с профилем по email без учёта регистра
     async findByEmail(email) {
-      const result = await database.query(
-        `SELECT ${publicColumns}, u.password_hash
-        FROM workify.users u JOIN workify.profiles p ON p.user_id = u.id
-        WHERE lower(u.email) = lower($1)`,
-        [email],
+      return publicUser(
+        await database.users.findFirst({
+          where: { email: { equals: email, mode: 'insensitive' } },
+          include: { profile: true },
+        }),
       );
-
-      return result.rows[0];
     },
 
+    // метод блокировки аккаунта и повторного чтения данных для входа
     async lockForLogin(id) {
-      return (
-        await database.query(
-          `SELECT ${publicColumns},u.password_hash FROM workify.users u JOIN workify.profiles p ON p.user_id=u.id WHERE u.id=$1 FOR UPDATE OF u`,
-          [id],
-        )
-      ).rows[0];
+      await lockRows(database, 'users', [id]);
+
+      return publicUser(
+        await database.users.findUnique({ where: { id }, include: { profile: true } }),
+      );
     },
 
+    // метод назначения роли администратора существующему аккаунту по email
     async promoteToAdmin(email) {
       return (
-        await database.query(
-          "UPDATE workify.users SET role = 'ADMIN' WHERE lower(email) = lower($1) RETURNING id",
-          [email],
-        )
-      ).rows[0];
+        await database.users.updateManyAndReturn({
+          where: { email: { equals: email, mode: 'insensitive' } },
+          data: { role: 'ADMIN' },
+          select: { id: true },
+        })
+      )[0];
     },
 
+    // метод создания аккаунта клиента с переданным хешем пароля и отдельной записью профиля
     async createUser({ email, username, passwordHash, firstName, lastName }) {
-      const result = await database.query(
-        `INSERT INTO workify.users (email, username, password_hash, role)
-        VALUES ($1, $2, $3, 'CLIENT') RETURNING id`,
-        [email, username, passwordHash],
+      const user = await database.users.create({
+        data: { email, username, password_hash: passwordHash, role: 'CLIENT' },
+      });
+
+      await database.profiles.create({
+        data: { user_id: user.id, first_name: firstName, last_name: lastName },
+      });
+
+      return publicUser(
+        await database.users.findUnique({ where: { id: user.id }, include: { profile: true } }),
       );
-
-      const id = result.rows[0].id;
-
-      await database.query(
-        `INSERT INTO workify.profiles (user_id, first_name, last_name) VALUES ($1, $2, $3)`,
-        [id, firstName, lastName],
-      );
-
-      return (
-        await database.query(
-          `SELECT ${publicColumns} FROM workify.users u
-        JOIN workify.profiles p ON p.user_id = u.id WHERE u.id = $1`,
-          [id],
-        )
-      ).rows[0];
     },
 
+    // метод создания сессии и сохранения хеша первого токена обновления
     async createSession(userId, expiresAt, tokenHash) {
-      const result = await database.query(
-        `INSERT INTO workify.auth_sessions (user_id, expires_at)
-        VALUES ($1, $2) RETURNING id, expires_at`,
-        [userId, expiresAt],
-      );
-
-      const session = result.rows[0];
+      const session = await database.auth_sessions.create({
+        data: { user_id: userId, expires_at: expiresAt },
+      });
 
       await this.addRefreshToken(session.id, tokenHash);
 
       return session;
     },
 
+    // метод добавления хеша токена обновления к существующей сессии
     async addRefreshToken(sessionId, tokenHash) {
-      await database.query(
-        `INSERT INTO workify.auth_refresh_tokens (session_id, token_hash) VALUES ($1, $2)`,
-        [sessionId, tokenHash],
-      );
+      await database.auth_refresh_tokens.create({
+        data: { session_id: sessionId, token_hash: tokenHash },
+      });
     },
 
+    // метод блокировки аккаунта и сессии с повторным чтением состояния токена
     async findRefreshForUpdate(tokenHash) {
-      // Match moderation/profile ordering: user, then session, then audit foreign keys.
-      await database.query(
-        `SELECT u.id FROM workify.users u JOIN workify.auth_sessions s ON s.user_id=u.id
-        WHERE s.id=(SELECT session_id FROM workify.auth_refresh_tokens WHERE token_hash=$1) FOR UPDATE OF u`,
-        [tokenHash],
-      );
-      // Serialize every rotation in a session, including replayed old tokens.
-      const user = (
-        await database.query(
-          `SELECT ${publicColumns}, s.id AS session_id,
-        s.expires_at, s.revoked_at FROM workify.auth_sessions s
-        JOIN workify.users u ON u.id = s.user_id JOIN workify.profiles p ON p.user_id = u.id
-        WHERE s.id = (SELECT session_id FROM workify.auth_refresh_tokens WHERE token_hash = $1)
-        FOR UPDATE OF s`,
-          [tokenHash],
-        )
-      ).rows[0];
+      const token = await database.auth_refresh_tokens.findUnique({
+        where: { token_hash: tokenHash },
+        include: { session: true },
+      });
 
-      if (!user) {
-        return undefined;
-      }
-      // A second statement sees committed consumption after waiting for the lock.
-      const token = (
-        await database.query(
-          'SELECT consumed_at FROM workify.auth_refresh_tokens WHERE token_hash = $1',
-          [tokenHash],
-        )
-      ).rows[0];
+      if (!token) return undefined;
 
-      return { ...user, consumed_at: token.consumed_at };
+      await lockRows(database, 'users', [token.session.user_id]);
+      await lockRows(database, 'auth_sessions', [token.session_id]);
+
+      const current = await database.auth_refresh_tokens.findUnique({
+        where: { token_hash: tokenHash },
+        include: { session: { include: { user: userInclude } } },
+      });
+      const user = publicUser(current?.session.user);
+
+      return user
+        ? {
+            ...user,
+            session_id: current.session_id,
+            expires_at: current.session.expires_at,
+            revoked_at: current.session.revoked_at,
+            consumed_at: current.consumed_at,
+          }
+        : undefined;
     },
 
+    // метод отметки токена обновления как использованного
     async consumeRefreshToken(tokenHash) {
-      await database.query(
-        'UPDATE workify.auth_refresh_tokens SET consumed_at = clock_timestamp() WHERE token_hash = $1',
-        [tokenHash],
-      );
+      await database.auth_refresh_tokens.update({
+        where: { token_hash: tokenHash },
+        data: { consumed_at: await databaseNow(database) },
+      });
     },
 
-    async revokeSession(sessionId) {
-      await database.query(
-        'UPDATE workify.auth_sessions SET revoked_at = COALESCE(revoked_at, clock_timestamp()) WHERE id = $1',
-        [sessionId],
-      );
+    // метод отзыва сессии с сохранением даты её первого отзыва
+    async revokeSession(id) {
+      await database.auth_sessions.updateMany({
+        where: { id, revoked_at: null },
+        data: { revoked_at: await databaseNow(database) },
+      });
     },
 
+    // метод поиска сессии по хешу токена обновления и её отзыва
     async revokeByRefreshToken(tokenHash) {
-      await database.query(
-        `UPDATE workify.auth_sessions SET revoked_at = COALESCE(revoked_at, clock_timestamp())
-        WHERE id = (SELECT session_id FROM workify.auth_refresh_tokens WHERE token_hash = $1)`,
-        [tokenHash],
-      );
+      const token = await database.auth_refresh_tokens.findUnique({
+        where: { token_hash: tokenHash },
+      });
+
+      if (token) await this.revokeSession(token.session_id);
     },
 
+    // метод получения пользователя по действующей сессии и идентификатору аккаунта
     async findCurrentUser(sessionId, userId) {
-      return (
-        await database.query(
-          `SELECT ${publicColumns} FROM workify.auth_sessions s
-        JOIN workify.users u ON u.id = s.user_id JOIN workify.profiles p ON p.user_id = u.id
-        WHERE s.id = $1 AND s.user_id = $2 AND s.revoked_at IS NULL AND s.expires_at > now()`,
-          [sessionId, userId],
-        )
-      ).rows[0];
+      const session = await database.auth_sessions.findFirst({
+        where: {
+          id: sessionId,
+          user_id: userId,
+          revoked_at: null,
+          expires_at: { gt: await databaseNow(database) },
+        },
+        include: { user: userInclude },
+      });
+
+      return publicUser(session?.user);
     },
   };
 }

@@ -1,30 +1,11 @@
-export async function withTransaction(pool, operation) {
-  const client = await pool.connect();
-  let started = false;
-  let releaseError;
+import { databaseError } from '../utils/database-error.js';
 
+// все переданные репозитории должны использовать один клиент текущей транзакции
+
+export async function withTransaction(prisma, operation) {
   try {
-    await client.query('BEGIN');
-    started = true;
-
-    const result = await operation(client);
-
-    await client.query('COMMIT');
-
-    return result;
+    return await prisma.$transaction(operation);
   } catch (error) {
-    if (started) {
-      try {
-        await client.query('ROLLBACK');
-      } catch (rollbackError) {
-        releaseError = rollbackError;
-      }
-    } else {
-      releaseError = error;
-    }
-
-    throw error;
-  } finally {
-    client.release(releaseError);
+    throw databaseError(error);
   }
 }

@@ -1,3 +1,5 @@
+import { withTransaction } from '../../src/repositories/transaction.js';
+import { createPrismaClient } from '../../src/config/prisma.js';
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -6,7 +8,6 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadConfig } from '../../src/config/env.js';
 import { createDatabasePool } from '../../src/config/database.js';
-import { withTransaction } from '../../src/repositories/transaction.js';
 import { createAuthRepository } from '../../src/repositories/auth.repository.js';
 import { createAuthService } from '../../src/services/auth.service.js';
 import { createAccessTokens } from '../../src/utils/tokens.js';
@@ -25,9 +26,13 @@ if (process.env.WORKIFY_DB_TESTS !== '1') {
 const config = loadConfig({ ...process.env, NODE_ENV: 'test' });
 // Immutable audit keeps its actors until the disposable database is removed.
 const pool = createDatabasePool(config.database);
+const prisma = createPrismaClient(pool);
 const owned = [];
 
-after(() => pool.end());
+after(async () => {
+  await prisma.$disconnect();
+  await pool.end();
+});
 
 const options = (token, method = 'GET', body) => ({
   method,
@@ -47,21 +52,21 @@ async function setup(context) {
   context.after(() => rm(directory, { recursive: true, force: true }));
 
   const fileService = createFileService({
-    repository: createFileRepository(pool),
+    repository: createFileRepository(prisma),
     storage: createLocalStorage(directory),
-    transaction: (op) => withTransaction(pool, (c) => op(createFileRepository(c))),
+    transaction: (op) => withTransaction(prisma, (c) => op(createFileRepository(c))),
   });
 
   const projectService = createProjectService({
-    repository: createProjectRepository(pool),
+    repository: createProjectRepository(prisma),
     fileService,
     transaction: (op) =>
-      withTransaction(pool, (c) => op(createProjectRepository(c), createFileRepository(c))),
+      withTransaction(prisma, (c) => op(createProjectRepository(c), createFileRepository(c))),
   });
 
   const authService = await createAuthService({
-    repository: createAuthRepository(pool),
-    transaction: (op) => withTransaction(pool, (c) => op(createAuthRepository(c))),
+    repository: createAuthRepository(prisma),
+    transaction: (op) => withTransaction(prisma, (c) => op(createAuthRepository(c))),
     accessTokens: createAccessTokens(config.auth),
     sessionTtlDays: 30,
   });

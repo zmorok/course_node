@@ -1,19 +1,23 @@
-// Explicit operator command; never exposed through HTTP or run during startup.
+// скрипт для однократного ручного назначения первого администратора после регистрации
+// не вызывается через HTTP и не запускается автоматически при старте приложения
 import { loadConfig } from '../config/env.js';
 import { createDatabasePool } from '../config/database.js';
+import { createPrismaClient } from '../config/prisma.js';
 import { createAuthRepository } from '../repositories/auth.repository.js';
 import { accountEmailInput } from '../validators/auth.js';
 import { withTransaction } from '../repositories/transaction.js';
 
 let pool;
+let prisma;
 
 try {
   const { email } = accountEmailInput({ email: process.argv[2] });
   const config = loadConfig();
 
   pool = createDatabasePool(config.database);
+  prisma = createPrismaClient(pool);
 
-  const user = await withTransaction(pool, async (client) => {
+  const user = await withTransaction(prisma, async (client) => {
     const transactionRepository = createAuthRepository(client);
     const found = await transactionRepository.findByEmail(email);
 
@@ -54,5 +58,6 @@ try {
   );
   process.exitCode = 1;
 } finally {
+  await prisma?.$disconnect();
   await pool?.end();
 }

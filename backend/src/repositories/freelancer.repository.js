@@ -1,51 +1,69 @@
-const sorts = {
-  rating:
-    'freelancer_rating DESC NULLS LAST,freelancer_review_count DESC,lower(last_name),lower(first_name),user_id',
-  name: 'lower(last_name),lower(first_name),lower(username),user_id',
-};
+import { plain, skillInclude, skillData } from './database-tools.js';
+
+const compare = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 export function createFreelancerRepository(database) {
   return {
+    // метод поиска публичных профилей исполнителей с навыками, рейтингами и пагинацией
     async list(query) {
-      const values = [];
-      const where = [];
+      const where = {};
 
-      const bind = (value) => {
-        values.push(value);
+      if (query.skill)
+        where.user_id = {
+          in: (
+            await database.user_skills.findMany({
+              where: { skill: { slug: query.skill } },
+              select: { user_id: true },
+            })
+          ).map((row) => row.user_id),
+        };
 
-        return `$${values.length}`;
+      if (query.minRating !== undefined) where.freelancer_rating = { gte: query.minRating };
+
+      let rows = plain(await database.v_public_profiles.findMany({ where }));
+
+      if (query.search)
+        rows = rows.filter((row) =>
+          [row.first_name, row.last_name, row.first_name, row.username]
+            .join(' ')
+            .toLowerCase()
+            .includes(query.search.toLowerCase()),
+        );
+
+      const byName = (a, b, includeUsername = true) =>
+        compare(a.last_name.toLowerCase(), b.last_name.toLowerCase()) ||
+        compare(a.first_name.toLowerCase(), b.first_name.toLowerCase()) ||
+        (includeUsername ? compare(a.username.toLowerCase(), b.username.toLowerCase()) : 0) ||
+        compare(a.user_id, b.user_id);
+
+      rows.sort(
+        query.sort === 'rating'
+          ? (a, b) =>
+              (a.freelancer_rating === null && b.freelancer_rating === null
+                ? 0
+                : a.freelancer_rating === null
+                  ? 1
+                  : b.freelancer_rating === null
+                    ? -1
+                    : Number(b.freelancer_rating) - Number(a.freelancer_rating)) ||
+              b.freelancer_review_count - a.freelancer_review_count ||
+              byName(a, b, false)
+          : byName,
+      );
+
+      const items = rows.slice((query.page - 1) * query.pageSize, query.page * query.pageSize);
+      const skills = await database.user_skills.findMany({
+        where: { user_id: { in: items.map((row) => row.user_id) } },
+        ...skillInclude,
+      });
+
+      return {
+        total: rows.length,
+        items: items.map((row) => ({
+          ...row,
+          skills: skills.filter((link) => link.user_id === row.user_id).map(skillData),
+        })),
       };
-
-      if (query.search) {
-        where.push(
-          `strpos(lower(concat_ws(' ',p.first_name,p.last_name,p.first_name,p.username)),lower(${bind(query.search)}))>0`,
-        );
-      }
-
-      if (query.skill) {
-        where.push(
-          `EXISTS(SELECT 1 FROM workify.user_skills us JOIN workify.skills sk ON sk.id=us.skill_id WHERE us.user_id=p.user_id AND sk.slug=${bind(query.skill)})`,
-        );
-      }
-
-      if (query.minRating !== undefined) {
-        where.push(`p.freelancer_rating>=${bind(query.minRating)}`);
-      }
-
-      const limit = bind(query.pageSize);
-      const offset = bind((query.page - 1) * query.pageSize);
-      const sort = sorts[query.sort];
-
-      return (
-        await database.query(
-          `WITH matches AS (SELECT p.* FROM workify.v_public_profiles p ${where.length ? `WHERE ${where.join(' AND ')}` : ''}),
-      page AS (SELECT m.*,COALESCE((SELECT jsonb_agg(jsonb_build_object('id',s.id,'slug',s.slug,'name',s.name) ORDER BY s.name,s.id)
-        FROM workify.user_skills us JOIN workify.skills s ON s.id=us.skill_id WHERE us.user_id=m.user_id),'[]'::jsonb) AS skills
-        FROM matches m ORDER BY ${sort} LIMIT ${limit} OFFSET ${offset})
-      SELECT (SELECT count(*) FROM matches)::int AS total,COALESCE((SELECT jsonb_agg(page ORDER BY ${sort}) FROM page),'[]'::jsonb) AS items`,
-          values,
-        )
-      ).rows[0];
     },
   };
 }

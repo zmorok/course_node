@@ -4,6 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import { createApp } from './app.js';
 import { ConfigurationError, loadConfig } from './config/env.js';
 import { createDatabasePool } from './config/database.js';
+import { createPrismaClient } from './config/prisma.js';
 import { createApiRouter } from './routes/index.js';
 
 // репозитории и обработчики транзакции
@@ -52,39 +53,41 @@ import { createLocalStorage } from './storage/local-storage.js';
 import { createAccessTokens } from './utils/tokens.js';
 
 let pool;
+let prisma;
 
 try {
   const config = loadConfig();
 
   await mkdir(config.uploadDir, { recursive: true });
   pool = createDatabasePool(config.database);
+  prisma = createPrismaClient(pool);
 
   // сервис проверки состояния: доступность базы данных и хранилища
-  const healthRepository = createHealthRepository(pool);
+  const healthRepository = createHealthRepository(prisma);
   const healthService = createHealthService({ healthRepository, uploadDir: config.uploadDir });
 
   // сервис авторизации: регистрация, вход, токены и сессии
   const authService = await createAuthService({
-    repository: createAuthRepository(pool),
+    repository: createAuthRepository(prisma),
     transaction: (operation) =>
-      withTransaction(pool, (client) => operation(createAuthRepository(client))),
+      withTransaction(prisma, (client) => operation(createAuthRepository(client))),
     accessTokens: createAccessTokens(config.auth),
     sessionTtlDays: config.auth.sessionTtlDays,
   });
 
   // сервис профиля: личные данные, навыки и смена пароля
   const profileService = createProfileService({
-    repository: createProfileRepository(pool),
+    repository: createProfileRepository(prisma),
     transaction: (operation) =>
-      withTransaction(pool, (client) => operation(createProfileRepository(client))),
+      withTransaction(prisma, (client) => operation(createProfileRepository(client))),
   });
 
   // сервис файлов: загрузка, доступ, аватары и удаление
   const fileService = createFileService({
-    repository: createFileRepository(pool),
+    repository: createFileRepository(prisma),
     storage: createLocalStorage(config.uploadDir),
     transaction: (operation) =>
-      withTransaction(pool, (client) => operation(createFileRepository(client))),
+      withTransaction(prisma, (client) => operation(createFileRepository(client))),
   });
 
   // выполнение удаления файлов, которые ранее были запланированы на удаление
@@ -94,45 +97,45 @@ try {
 
   // сервис портфолио: работы пользователя, навыки и вложения
   const portfolioService = createPortfolioService({
-    repository: createPortfolioRepository(pool),
+    repository: createPortfolioRepository(prisma),
     fileService,
     transaction: (operation) =>
-      withTransaction(pool, (client) =>
+      withTransaction(prisma, (client) =>
         operation(createPortfolioRepository(client), createFileRepository(client)),
       ),
   });
 
   // сервис проектов: каталог, черновики, публикация и отмена
   const projectService = createProjectService({
-    repository: createProjectRepository(pool),
+    repository: createProjectRepository(prisma),
     fileService,
     transaction: (operation) =>
-      withTransaction(pool, (client) =>
+      withTransaction(prisma, (client) =>
         operation(createProjectRepository(client), createFileRepository(client)),
       ),
   });
 
   // сервис откликов: подача, изменение, отзыв и выбор исполнителя
   const proposalService = createProposalService({
-    repository: createProposalRepository(pool),
+    repository: createProposalRepository(prisma),
     assignmentService: createAssignmentService(),
     transaction: (operation) =>
-      withTransaction(pool, (client) =>
+      withTransaction(prisma, (client) =>
         operation(createProposalRepository(client), createAssignmentRepository(client)),
       ),
   });
 
   // сервис поиска исполнителей: каталог, фильтры и сортировка
   const freelancerService = createFreelancerService({
-    repository: createFreelancerRepository(pool),
+    repository: createFreelancerRepository(prisma),
   });
 
   // сервис приглашений: предложение условий, принятие и отклонение
   const invitationService = createInvitationService({
-    repository: createInvitationRepository(pool),
+    repository: createInvitationRepository(prisma),
     assignmentService: createAssignmentService(),
     transaction: (operation) =>
-      withTransaction(pool, (client) =>
+      withTransaction(prisma, (client) =>
         operation(
           createInvitationRepository(client),
           createAssignmentRepository(client),
@@ -142,15 +145,15 @@ try {
   });
 
   // сервис просмотра заказов: списки, история и права участников
-  const orderService = createOrderService({ repository: createOrderRepository(pool) });
+  const orderService = createOrderService({ repository: createOrderRepository(prisma) });
 
   // сервис выполнения заказов: результаты, доработки, сроки и завершение
   const orderWorkService = createOrderWorkService({
-    repository: createOrderWorkRepository(pool),
-    orders: createOrderRepository(pool),
+    repository: createOrderWorkRepository(prisma),
+    orders: createOrderRepository(prisma),
     fileService,
     transaction: (operation) =>
-      withTransaction(pool, (client) =>
+      withTransaction(prisma, (client) =>
         operation(
           createOrderWorkRepository(client),
           createOrderRepository(client),
@@ -161,45 +164,45 @@ try {
 
   // сервис отзывов: оценки, редактирование и публичные рейтинги
   const reviewService = createReviewService({
-    repository: createReviewRepository(pool),
+    repository: createReviewRepository(prisma),
     transaction: (operation) =>
-      withTransaction(pool, (client) => operation(createReviewRepository(client))),
+      withTransaction(prisma, (client) => operation(createReviewRepository(client))),
   });
 
   // сервис жалоб: подача, изменение и просмотр обращений
   const complaintService = createComplaintService({
-    repository: createComplaintRepository(pool),
+    repository: createComplaintRepository(prisma),
     fileService,
     transaction: (operation) =>
-      withTransaction(pool, (client) =>
+      withTransaction(prisma, (client) =>
         operation(createComplaintRepository(client), createFileRepository(client)),
       ),
   });
 
   // сервис предупреждений: выдача и отметка о прочтении
   const warningService = createWarningService({
-    repository: createWarningRepository(pool),
+    repository: createWarningRepository(prisma),
     transaction: (operation) =>
-      withTransaction(pool, (client) => operation(createWarningRepository(client))),
+      withTransaction(prisma, (client) => operation(createWarningRepository(client))),
   });
 
   // сервис администрирования: пользователи, жалобы, санкции и блокировки
   const adminService = createAdminService({
-    repository: createAdminRepository(pool),
+    repository: createAdminRepository(prisma),
     transaction: (operation) =>
-      withTransaction(pool, (client) => operation(createAdminRepository(client))),
+      withTransaction(prisma, (client) => operation(createAdminRepository(client))),
   });
 
   // сервис уведомлений: список, счётчик непрочитанных и отметки о прочтении
   const notificationService = createNotificationService({
-    repository: createNotificationRepository(pool),
+    repository: createNotificationRepository(prisma),
   });
 
   // сервис аудита: журнал событий, фильтры, импорт и экспорт
   const auditService = createAuditService({
-    repository: createAuditRepository(pool),
+    repository: createAuditRepository(prisma),
     transaction: (operation) =>
-      withTransaction(pool, (client) => operation(createAuditRepository(client))),
+      withTransaction(prisma, (client) => operation(createAuditRepository(client))),
   });
 
   // внедрение сервисов в API-роутер приложения
@@ -252,6 +255,7 @@ try {
 
     server.close(async () => {
       try {
+        await prisma.$disconnect();
         await pool.end();
         clearTimeout(timeout);
         process.exit(0);
@@ -272,6 +276,7 @@ try {
   );
 
   try {
+    await prisma?.$disconnect();
     await pool?.end();
   } catch {
     console.error(JSON.stringify({ event: 'shutdown_failed' }));

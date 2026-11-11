@@ -1,280 +1,251 @@
 import { createAuditRepository } from './audit.repository.js';
+import {
+  databaseNow,
+  lockRows,
+  plain,
+  page,
+  date,
+  replaceLinks,
+  blockingStatuses,
+  activeUser,
+  fileInclude,
+  fileData,
+  skillInclude,
+  skillData,
+} from './database-tools.js';
 
-const activeCustomer = "u.role='CLIENT' AND (u.status='ACTIVE' OR u.blocked_until <= now())";
-const relations = `JOIN workify.users u ON u.id=p.customer_id JOIN workify.profiles profile ON profile.user_id=u.id
-  LEFT JOIN workify.categories c ON c.id=p.category_id`;
+export const projectInclude = {
+  customer: { include: { profile: true } },
+  category: true,
+  skills: skillInclude,
+  files: fileInclude,
+};
 
-const columns = `p.id,p.customer_id,p.category_id,p.title,p.description,p.budget::text AS budget,p.desired_deadline_at,p.status,
-  p.published_at,p.completed_at,p.cancelled_at,p.cancellation_reason,p.created_at,p.updated_at,
-  c.slug AS category_slug,c.name AS category_name,u.username,profile.first_name,profile.last_name,
-  (${activeCustomer}) AS customer_active,
-  COALESCE((SELECT jsonb_agg(jsonb_build_object('id',s.id,'slug',s.slug,'name',s.name) ORDER BY s.name,s.id)
-    FROM workify.project_skills ps JOIN workify.skills s ON s.id=ps.skill_id WHERE ps.project_id=p.id),'[]'::jsonb) AS skills,
-  COALESCE((SELECT jsonb_agg(jsonb_build_object('id',f.id,'originalName',f.original_name,'mimeType',f.mime_type,
-    'sizeBytes',f.size_bytes,'sha256',f.sha256,'createdAt',f.created_at) ORDER BY f.created_at,f.id)
-    FROM workify.project_files pf JOIN workify.stored_files f ON f.id=pf.file_id WHERE pf.project_id=p.id AND f.deleted_at IS NULL),'[]'::jsonb) AS files`;
+export function projectData({ customer, category, skills, files, ...row }, now) {
+  return {
+    ...plain(row),
+    username: customer.username,
+    first_name: customer.profile.first_name,
+    last_name: customer.profile.last_name,
+    category_slug: category?.slug ?? null,
+    category_name: category?.name ?? null,
+    customer_active:
+      customer.role === 'CLIENT' &&
+      (customer.status === 'ACTIVE' || (customer.blocked_until && customer.blocked_until <= now)),
+    skills: skills.map(skillData),
+    files: files.map((link) => fileData(link, true)),
+  };
+}
+
+const projectInput = (input) => ({
+  title: input.title,
+  description: input.description,
+  category_id: input.categoryId,
+  budget: input.budget,
+  desired_deadline_at: date(input.desiredDeadlineAt),
+});
 
 export function createProjectRepository(database) {
   return {
     audit: createAuditRepository(database).audit,
-    async categories() {
-      return (await database.query('SELECT id,slug,name FROM workify.categories ORDER BY name,id'))
-        .rows;
-    },
 
+    // метод получения отсортированного справочника категорий проектов
+    categories: () =>
+      database.categories.findMany({
+        select: { id: true, slug: true, name: true },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      }),
+
+    // метод поиска публичных или собственных проектов с фильтрами и пагинацией
     async list(query, ownerId) {
-      const values = [];
-      const conditions = [];
-
-      const bind = (value) => {
-        values.push(value);
-
-        return `$${values.length}`;
+      const now = await databaseNow(database);
+      const where = {
+        ...(ownerId
+          ? { customer_id: ownerId }
+          : { status: 'OPEN', customer: { role: 'CLIENT', ...activeUser(now) } }),
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.category ? { category: { slug: query.category } } : {}),
+        ...(query.skill ? { skills: { some: { skill: { slug: query.skill } } } } : {}),
       };
 
-      if (ownerId) {
-        conditions.push(`p.customer_id=${bind(ownerId)}`);
-      } else {
-        conditions.push(`p.status='OPEN'`, activeCustomer);
-      }
+      if (query.minBudget !== undefined || query.maxBudget !== undefined)
+        where.budget = { gte: query.minBudget, lte: query.maxBudget };
 
-      if (query.status) {
-        conditions.push(`p.status=${bind(query.status)}`);
-      }
+      const stamp = ownerId ? 'created_at' : 'published_at';
+      const sorts = {
+        newest: [{ [stamp]: 'desc' }, { id: 'desc' }],
+        oldest: [{ [stamp]: 'asc' }, { id: 'asc' }],
+        budget_asc: [{ budget: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
+        budget_desc: [{ budget: { sort: 'desc', nulls: 'last' } }, { id: 'asc' }],
+        deadline_asc: [{ desired_deadline_at: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
+      };
+      const options = { where, include: projectInclude, orderBy: sorts[query.sort] };
 
       if (query.search) {
-        conditions.push(
-          `strpos(lower(p.title || ' ' || p.description),lower(${bind(query.search)}))>0`,
+        const rows = (await database.projects.findMany(options)).filter((row) =>
+          (row.title + ' ' + row.description).toLowerCase().includes(query.search.toLowerCase()),
         );
+
+        return {
+          total: rows.length,
+          items: rows
+            .slice((query.page - 1) * query.pageSize, query.page * query.pageSize)
+            .map((row) => projectData(row, now)),
+        };
       }
 
-      if (query.category) {
-        conditions.push(`c.slug=${bind(query.category)}`);
-      }
+      const result = await page(database, 'projects', query, options);
 
-      if (query.skill) {
-        conditions.push(
-          `EXISTS (SELECT 1 FROM workify.project_skills ps JOIN workify.skills s ON s.id=ps.skill_id WHERE ps.project_id=p.id AND s.slug=${bind(query.skill)})`,
-        );
-      }
-
-      if (query.minBudget !== undefined) {
-        conditions.push(`p.budget>=${bind(query.minBudget)}::numeric`);
-      }
-
-      if (query.maxBudget !== undefined) {
-        conditions.push(`p.budget<=${bind(query.maxBudget)}::numeric`);
-      }
-
-      const timestamp = ownerId ? 'p.created_at' : 'p.published_at';
-
-      const sorts = {
-        newest: `${timestamp} DESC,p.id DESC`,
-        oldest: `${timestamp} ASC,p.id ASC`,
-        budget_asc: 'p.budget ASC NULLS LAST,p.id ASC',
-        budget_desc: 'p.budget DESC NULLS LAST,p.id ASC',
-        deadline_asc: 'p.desired_deadline_at ASC NULLS LAST,p.id ASC',
-      };
-
-      const sort = sorts[query.sort];
-      const limit = bind(query.pageSize);
-      const offset = bind((query.page - 1) * query.pageSize);
-
-      return (
-        await database.query(
-          `WITH matches AS (SELECT p.id FROM workify.projects p ${relations} WHERE ${conditions.join(' AND ')}),
-        page AS (SELECT ${columns},row_number() OVER (ORDER BY ${sort}) AS position FROM workify.projects p
-          JOIN matches m ON m.id=p.id ${relations} ORDER BY ${sort} LIMIT ${limit} OFFSET ${offset})
-        SELECT (SELECT count(*) FROM matches)::int AS total,
-          COALESCE((SELECT jsonb_agg(page ORDER BY position) FROM page),'[]'::jsonb) AS items`,
-          values,
-        )
-      ).rows[0];
+      return { ...result, items: result.items.map((row) => projectData(row, now)) };
     },
 
+    // метод получения собственного проекта или открытого проекта доступного заказчика
     async findVisible(id, actorId) {
-      return (
-        await database.query(
-          `SELECT ${columns} FROM workify.projects p ${relations}
-        WHERE p.id=$1 AND (p.customer_id=$2::uuid OR (p.status='OPEN' AND ${activeCustomer}))`,
-          [id, actorId ?? null],
-        )
-      ).rows[0];
+      const now = await databaseNow(database);
+      const row = await database.projects.findFirst({
+        where: {
+          id,
+          OR: [
+            ...(actorId ? [{ customer_id: actorId }] : []),
+            { status: 'OPEN', customer: { role: 'CLIENT', ...activeUser(now) } },
+          ],
+        },
+        include: projectInclude,
+      });
+
+      return row ? projectData(row, now) : undefined;
     },
 
+    // метод блокировки и чтения проекта, принадлежащего текущему заказчику
     async lockOwn(id, actorId) {
-      return (
-        await database.query(
-          'SELECT * FROM workify.projects WHERE id=$1 AND customer_id=$2 FOR UPDATE',
-          [id, actorId],
-        )
-      ).rows[0];
+      await lockRows(database, 'projects', [id]);
+
+      return plain(await database.projects.findFirst({ where: { id, customer_id: actorId } }));
     },
 
-    async countOwn(actorId) {
-      return Number(
-        (
-          await database.query('SELECT count(*) FROM workify.projects WHERE customer_id=$1', [
-            actorId,
-          ])
-        ).rows[0].count,
-      );
-    },
+    // метод подсчёта всех проектов текущего заказчика
+    countOwn: (actorId) => database.projects.count({ where: { customer_id: actorId } }),
 
+    // метод проверки категории и навыков с блокировкой записей справочников
     async validReferences(categoryId, skillIds) {
-      const category = categoryId
-        ? (
-            await database.query('SELECT id FROM workify.categories WHERE id=$1 FOR SHARE', [
-              categoryId,
-            ])
-          ).rowCount === 1
-        : true;
-
-      const skills =
-        (
-          await database.query('SELECT id FROM workify.skills WHERE id=ANY($1::uuid[]) FOR SHARE', [
-            skillIds,
-          ])
-        ).rowCount === skillIds.length;
-
-      return { category, skills };
+      return {
+        category:
+          !categoryId || (await lockRows(database, 'categories', [categoryId], true)).length === 1,
+        skills: (await lockRows(database, 'skills', skillIds, true)).length === skillIds.length,
+      };
     },
 
+    // метод сохранения нового проекта в состоянии черновика
     async insert(actorId, input) {
       return (
-        await database.query(
-          `INSERT INTO workify.projects (customer_id,title,description,category_id,budget,desired_deadline_at)
-        VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-          [
-            actorId,
-            input.title,
-            input.description,
-            input.categoryId,
-            input.budget,
-            input.desiredDeadlineAt,
-          ],
-        )
-      ).rows[0].id;
+        await database.projects.create({ data: { customer_id: actorId, ...projectInput(input) } })
+      ).id;
     },
 
+    // метод изменения условий проекта без смены его статуса
     async update(id, input) {
-      await database.query(
-        `UPDATE workify.projects SET title=$2,description=$3,category_id=$4,budget=$5,desired_deadline_at=$6 WHERE id=$1`,
-        [
-          id,
-          input.title,
-          input.description,
-          input.categoryId,
-          input.budget,
-          input.desiredDeadlineAt,
-        ],
-      );
+      await database.projects.updateMany({ where: { id }, data: projectInput(input) });
     },
 
+    // метод получения идентификаторов навыков, связанных с проектом
     async skills(id) {
       return (
-        await database.query(
-          'SELECT skill_id FROM workify.project_skills WHERE project_id=$1 ORDER BY skill_id',
-          [id],
-        )
-      ).rows.map((row) => row.skill_id);
+        await database.project_skills.findMany({
+          where: { project_id: id },
+          orderBy: { skill_id: 'asc' },
+        })
+      ).map((row) => row.skill_id);
     },
 
+    // метод получения идентификаторов файлов, связанных с проектом
     async files(id) {
       return (
-        await database.query(
-          'SELECT file_id FROM workify.project_files WHERE project_id=$1 ORDER BY file_id',
-          [id],
-        )
-      ).rows.map((row) => row.file_id);
+        await database.project_files.findMany({
+          where: { project_id: id },
+          orderBy: { file_id: 'asc' },
+        })
+      ).map((row) => row.file_id);
     },
 
-    async replaceSkills(id, ids) {
-      await database.query('DELETE FROM workify.project_skills WHERE project_id=$1', [id]);
-      await database.query(
-        'INSERT INTO workify.project_skills (project_id,skill_id) SELECT $1,unnest($2::uuid[])',
-        [id, ids],
-      );
-    },
+    // метод полной замены связей проекта с навыками
+    replaceSkills: (id, ids) =>
+      replaceLinks(database, 'project_skills', 'project_id', id, 'skill_id', ids),
 
-    async replaceFiles(id, ids) {
-      await database.query('DELETE FROM workify.project_files WHERE project_id=$1', [id]);
-      await database.query(
-        'INSERT INTO workify.project_files (project_id,file_id) SELECT $1,unnest($2::uuid[])',
-        [id, ids],
-      );
-    },
+    // метод полной замены связей проекта с файлами
+    replaceFiles: (id, ids) =>
+      replaceLinks(database, 'project_files', 'project_id', id, 'file_id', ids),
 
+    // метод открытия проекта для предложений с сохранением даты публикации
     async publish(id) {
-      await database.query(
-        "UPDATE workify.projects SET status='OPEN',published_at=clock_timestamp() WHERE id=$1",
-        [id],
-      );
+      await database.projects.updateMany({
+        where: { id },
+        data: { status: 'OPEN', published_at: await databaseNow(database) },
+      });
     },
 
+    // метод сохранения отмены проекта с причиной и датой
     async cancel(id, reason) {
-      await database.query(
-        "UPDATE workify.projects SET status='CANCELLED',cancelled_at=clock_timestamp(),cancellation_reason=$2 WHERE id=$1",
-        [id, reason],
-      );
+      await database.projects.updateMany({
+        where: { id },
+        data: {
+          status: 'CANCELLED',
+          cancelled_at: await databaseNow(database),
+          cancellation_reason: reason,
+        },
+      });
     },
 
+    // метод закрытия ожидающих откликов и приглашений по указанной причине
     async closePending(id, reason) {
-      const proposals = (
-        await database.query(
-          "UPDATE workify.proposals SET status='REJECTED',decided_at=clock_timestamp(),closure_reason=$2 WHERE project_id=$1 AND status='PENDING' RETURNING id,customer_id,freelancer_id",
-          [id, reason],
-        )
-      ).rows;
+      const now = await databaseNow(database);
+      const proposals = await database.proposals.updateManyAndReturn({
+        where: { project_id: id, status: 'PENDING' },
+        data: { status: 'REJECTED', decided_at: now, closure_reason: reason },
+      });
+      const invitations = await database.project_invitations.updateManyAndReturn({
+        where: { project_id: id, status: 'PENDING' },
+        data: { status: 'EXPIRED', decided_at: now, closure_reason: reason },
+      });
 
-      const invitations = (
-        await database.query(
-          "UPDATE workify.project_invitations SET status='EXPIRED',decided_at=clock_timestamp(),closure_reason=$2 WHERE project_id=$1 AND status='PENDING' RETURNING id,customer_id,freelancer_id",
-          [id, reason],
-        )
-      ).rows;
-
-      return { proposals, invitations };
+      return { proposals: plain(proposals), invitations: plain(invitations) };
     },
 
+    // метод сохранения уведомления о закрытии отклика или приглашения
     async notifyClosed(recipientId, kind, sourceId, projectId, status, reason) {
-      const column = kind === 'proposal' ? 'proposal_id' : 'invitation_id';
-
-      await database.query(
-        `INSERT INTO workify.notifications(recipient_id,event_type,project_id,${column},message,metadata) VALUES($1,$2,$3,$4,'Предложение закрыто: условия проекта изменились или проект отменён',$5::jsonb)`,
-        [
-          recipientId,
-          kind === 'proposal' ? 'PROPOSAL_STATUS_CHANGED' : 'INVITATION_STATUS_CHANGED',
-          projectId,
-          sourceId,
-          JSON.stringify({ status, reason }),
-        ],
-      );
+      await database.notifications.create({
+        data: {
+          recipient_id: recipientId,
+          event_type: kind === 'proposal' ? 'PROPOSAL_STATUS_CHANGED' : 'INVITATION_STATUS_CHANGED',
+          project_id: projectId,
+          [kind === 'proposal' ? 'proposal_id' : 'invitation_id']: sourceId,
+          message: 'Предложение закрыто: условия проекта изменились или проект отменён',
+          metadata: { status, reason },
+        },
+      });
     },
 
+    // метод проверки наличия активного или завершённого заказа по проекту
     async blockingOrder(id) {
-      return (
-        (
-          await database.query(
-            "SELECT 1 FROM workify.orders WHERE project_id=$1 AND status IN ('IN_PROGRESS','SUBMITTED','REVISION_REQUESTED','COMPLETED') LIMIT 1",
-            [id],
-          )
-        ).rowCount > 0
+      return Boolean(
+        await database.orders.findFirst({
+          where: { project_id: id, status: { in: blockingStatuses } },
+          select: { id: true },
+        }),
       );
     },
 
+    // метод проверки наличия откликов, приглашений или заказов в истории проекта
     async hasHistory(id) {
       return (
-        await database.query(
-          `SELECT EXISTS(SELECT 1 FROM workify.proposals WHERE project_id=$1)
-      OR EXISTS(SELECT 1 FROM workify.project_invitations WHERE project_id=$1) OR EXISTS(SELECT 1 FROM workify.orders WHERE project_id=$1) AS found`,
-          [id],
-        )
-      ).rows[0].found;
+        (await database.proposals.count({ where: { project_id: id } })) > 0 ||
+        (await database.project_invitations.count({ where: { project_id: id } })) > 0 ||
+        (await database.orders.count({ where: { project_id: id } })) > 0
+      );
     },
 
+    // метод удаления записи проекта из базы
     async remove(id) {
-      await database.query('DELETE FROM workify.projects WHERE id=$1', [id]);
+      await database.projects.deleteMany({ where: { id } });
     },
   };
 }
