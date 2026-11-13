@@ -39,7 +39,9 @@ docker compose up --build -d --wait --remove-orphans
 - [Проверка backend и БД](http://localhost:3000/api/health).
 - [Проверка API через Nginx](http://localhost:5173/api/health).
 
-Остановка – `docker compose down`. Данные PostgreSQL и файлы сохраняются в volumes `postgres_data` и `uploads_data`. Порты и настройки меняются через `.env`; в Git хранится только [.env.example](.env.example).
+Стек Docker Compose называется `workify_course`, контейнеры – `postgres_course`, `backend_course` и `proxy_course`, образ бэкенда – `workify_course_backend`.
+
+Остановка – `docker compose down`. Данные PostgreSQL и файлы сохраняются в томах `workify_course_postgres_data` и `workify_course_uploads_data` (ключи Compose – `postgres_data` и `uploads_data`). Порты и настройки меняются через `.env`; в Git хранится только [.env.example](.env.example).
 
 ## Фронтенд и обратный прокси
 

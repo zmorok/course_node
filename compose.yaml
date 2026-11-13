@@ -1,9 +1,9 @@
-name: workify
+name: workify_course
 
 services:
   # Application data and initialize a new database once
   postgres:
-    container_name: postgres
+    container_name: postgres_course
     image: postgres:17-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-workify}
@@ -25,7 +25,8 @@ services:
 
   # Application API
   backend:
-    container_name: backend
+    container_name: backend_course
+    image: workify_course_backend
     build: ./backend
     environment:
       NODE_ENV: production
@@ -71,7 +72,7 @@ services:
 
   # Serve the React bundle and forward API requests to the backend
   proxy:
-    container_name: proxy
+    container_name: proxy_course
     image: nginx:alpine
     ports:
       - '127.0.0.1:${FRONTEND_PORT:-5173}:8080'
